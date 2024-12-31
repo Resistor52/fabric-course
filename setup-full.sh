@@ -90,6 +90,13 @@ echo "Creating student passwords file..."
 sudo mkdir -p /home/ubuntu/course-info
 sudo chown ubuntu:ubuntu /home/ubuntu/course-info
 
+# Create course README
+echo "Downloading course README..."
+sudo -u ubuntu mkdir -p /home/ubuntu/course-content
+curl -fsSL https://raw.githubusercontent.com/Resistor52/fabric-course/main/course-readme.md -o /tmp/course-readme.md
+sudo -u ubuntu cp /tmp/course-readme.md /home/ubuntu/course-content/course-readme.md
+rm -f /tmp/course-readme.md
+
 echo "Writing initial markdown content..."
 sudo -u ubuntu tee /home/ubuntu/course-info/student-passwords.md << 'EOF'
 # Student Access Information
@@ -467,37 +474,6 @@ if [ -f "$CREDS_FILE" ]; then
 else
     echo "✗ Credentials file not found!"
 fi
-
-# Create course README
-echo "Downloading course README..."
-sudo -u ubuntu mkdir -p /home/ubuntu/course-content
-curl -fsSL https://raw.githubusercontent.com/Resistor52/fabric-course/main/course-readme.md -o /tmp/course-readme.md
-sudo -u ubuntu cp /tmp/course-readme.md /home/ubuntu/course-content/course-readme.md
-rm -f /tmp/course-readme.md
-
-# Configure first user's workspace
-sudo -u student1 mkdir -p "/home/student1/workspace"
-sudo -u student1 cp /home/ubuntu/course-content/course-readme.md "/home/student1/workspace/"
-sudo -u student1 cat > "/home/student1/.config/code-server/config.yaml" << EOF
-bind-addr: 0.0.0.0:$PORT
-auth: password
-password: $PASSWORD
-cert: false
-EOF
-
-# Add workspace configuration
-sudo -u student1 mkdir -p "/home/student1/workspace/.vscode"
-sudo -u student1 cat > "/home/student1/workspace/.vscode/settings.json" << 'EOF'
-{
-    "workbench.colorTheme": "Default Dark+",
-    "workbench.startupEditor": "none",
-    "editor.fontSize": 14,
-    "terminal.integrated.fontSize": 14,
-    "workbench.colorCustomizations": {
-        "terminal.background": "#1E1E1E"
-    }
-}
-EOF
 
 echo -e "\nSetup completed at $(date)"
 echo "Student credentials are available in: $CREDS_FILE" 
