@@ -11,28 +11,6 @@ set -e
 BASE_PORT=8080
 NUM_USERS=10
 
-# Create users and set up their environments
-for i in $(seq 1 $NUM_USERS); do
-    USER="student$i"
-    PORT=$((BASE_PORT + i - 1))
-    echo "Setting up user $USER with port $PORT..."
-
-    # Create user
-    sudo useradd -m -s /bin/bash "$USER"
-
-    # Set up user's home directory
-    USER_HOME="/home/$USER"
-    sudo -u "$USER" mkdir -p "$USER_HOME"
-
-    # Add Go environment variables to user's profile
-    sudo -u "$USER" cat >> "$USER_HOME/.profile" << 'EOF'
-# Golang environment variables
-export GOROOT=/usr/local/go
-export GOPATH=$HOME/go
-export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
-EOF
-done
-
 # System updates and base installations
 echo "Updating system and installing dependencies..."
 sudo DEBIAN_FRONTEND=noninteractive apt-get update
@@ -144,28 +122,10 @@ generate_password() {
     echo "${words}secure"
 }
 
-# Generate and save passwords for each user
-declare -A USER_PASSWORDS
-for i in $(seq 1 $NUM_USERS); do
-    USER="student$i"
-    PASSWORD=$(generate_password)
-    USER_PASSWORDS[$USER]=$PASSWORD
-    echo "- Student $i: \`$PASSWORD\`" >> /home/ubuntu/course-info/student-passwords.md
-done
-
-echo "
-## Access URLs
-
-Access your code-server instance at: https://${DOMAIN}/studentN/
-(Replace N with your student number)
-" >> /home/ubuntu/course-info/student-passwords.md
-
-chown ubuntu:ubuntu -R /home/ubuntu/course-info
-
 # Create first student user and set up their environment
+echo "Setting up first user student1..."
 USER="student1"
 PORT=$BASE_PORT
-echo "Setting up first user $USER with port $PORT..."
 
 # Create user
 sudo useradd -m -s /bin/bash "$USER"
@@ -189,7 +149,6 @@ rm -f "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
 # Configure code-server for first user
 sudo -u "$USER" mkdir -p "$USER_HOME/.config/code-server"
 PASSWORD=$(generate_password)
-USER_PASSWORDS[$USER]=$PASSWORD
 echo "- Student 1: \`$PASSWORD\`" >> /home/ubuntu/course-info/student-passwords.md
 
 sudo -u "$USER" cat > "$USER_HOME/.config/code-server/config.yaml" << EOF
@@ -237,7 +196,6 @@ for i in $(seq 2 $NUM_USERS); do
 
     # Update code-server config with unique port and password
     PASSWORD=$(generate_password)
-    USER_PASSWORDS[$USER]=$PASSWORD
     echo "- Student $i: \`$PASSWORD\`" >> /home/ubuntu/course-info/student-passwords.md
 
     sudo -u "$USER" cat > "/home/$USER/.config/code-server/config.yaml" << EOF
@@ -250,6 +208,15 @@ EOF
     # Enable code-server service for user
     sudo systemctl enable --now "code-server@$USER"
 done
+
+echo "
+## Access URLs
+
+Access your code-server instance at: https://${DOMAIN}/studentN/
+(Replace N with your student number)
+" >> /home/ubuntu/course-info/student-passwords.md
+
+chown ubuntu:ubuntu -R /home/ubuntu/course-info
 
 # Configure Nginx for all users (HTTP first)
 echo "Configuring Nginx for HTTP..."
