@@ -22,6 +22,47 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl software-properties-common ufw nginx certbot python3-certbot-nginx dnsutils
 
+# Install Go (required for Fabric)
+echo "Installing Go..."
+# Remove any existing Go installation
+sudo rm -rf /usr/local/go
+
+# Dynamically fetch and install the latest version of Go with checksum verification
+echo "Fetching latest Go version..."
+LATEST_GO=$(curl -s https://go.dev/VERSION?m=text | head -n1)
+echo "Latest Go version: $LATEST_GO"
+
+echo "Downloading Go..."
+wget https://go.dev/dl/$LATEST_GO.linux-amd64.tar.gz
+CHECKSUM=$(curl -sL "https://dl.google.com/go/$LATEST_GO.linux-amd64.tar.gz.sha256")
+echo "Downloaded checksum: $CHECKSUM"
+echo "Filename: $LATEST_GO.linux-amd64.tar.gz"
+
+echo "Verifying checksum..."
+echo "$CHECKSUM  $LATEST_GO.linux-amd64.tar.gz" | sha256sum --check
+echo "Checksum verified, extracting..."
+sudo tar -C /usr/local -xzf $LATEST_GO.linux-amd64.tar.gz
+rm $LATEST_GO.linux-amd64.tar.gz
+
+# Add Go environment variables to ubuntu user's profile
+cat >> $HOME/.profile << 'EOF'
+# Golang environment variables
+export GOROOT=/usr/local/go
+export GOPATH=$HOME/go
+export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
+EOF
+
+# Source the profile for immediate effect
+source $HOME/.profile
+
+# Install Fabric
+echo "Installing Fabric..."
+go install github.com/danielmiessler/fabric@latest
+
+# Run Fabric setup
+echo "Running Fabric help to verify installation"
+sudo -u ubuntu bash -c "source $HOME/.profile && fabric -h"
+
 echo "Installing code-server..."
 # Install code-server
 curl -fsSL https://code-server.dev/install.sh | sudo -u ubuntu sh
