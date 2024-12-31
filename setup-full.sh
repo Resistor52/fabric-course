@@ -162,6 +162,13 @@ sudo -u "$USER" curl -fL https://github.com/coder/code-server/releases/download/
 DEBIAN_FRONTEND=noninteractive sudo -E dpkg -i "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
 rm -f "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
 
+# Verify code-server installation
+if ! which code-server > /dev/null; then
+    echo "✗ code-server installation failed"
+    exit 1
+fi
+echo "✓ code-server installed successfully"
+
 # Configure code-server for first user
 sudo -u "$USER" mkdir -p "$USER_HOME/.config/code-server"
 PASSWORD=$(generate_password)
@@ -267,7 +274,18 @@ EOF
 
 # Download patterns for first user
 echo "Downloading patterns for $USER..."
-sudo -u "$USER" bash -c "source $USER_HOME/.profile && fabric -U"
+if ! sudo -u "$USER" bash -c "source $USER_HOME/.profile && fabric -U"; then
+    echo "✗ Failed to download Fabric patterns"
+    echo "This is not critical, patterns can be downloaded later"
+fi
+
+# Verify Fabric installation
+if sudo -u "$USER" bash -c "source $USER_HOME/.profile && which fabric" > /dev/null; then
+    echo "✓ Fabric installed successfully"
+else
+    echo "✗ Fabric installation failed"
+    exit 1
+fi
 
 # Enable code-server service for first user
 sudo systemctl enable --now "code-server@$USER"
@@ -283,25 +301,43 @@ for i in $(seq 2 $NUM_USERS); do
     sudo mkdir -p "/home/$USER/workspace"
     sudo mkdir -p "/home/$USER/workspace/.vscode"
     sudo mkdir -p "/home/$USER/.config"
+    sudo mkdir -p "/home/$USER/.config/fabric"
+    sudo mkdir -p "/home/$USER/.config/code-server"
     sudo mkdir -p "/home/$USER/.local"
+    sudo mkdir -p "/home/$USER/.local/share/code-server/assets"
+    sudo mkdir -p "/home/$USER/.local/share/code-server/User"
+    sudo mkdir -p "/home/$USER/.local/share/code-server/Machine"
     
     # Copy course README
     echo "Copying course README for $USER..."
-    sudo cp /home/ubuntu/course-content/course-readme.md "/home/$USER/workspace/"
+    if ! sudo cp /home/ubuntu/course-content/course-readme.md "/home/$USER/workspace/"; then
+        echo "✗ Failed to copy course README for $USER"
+        exit 1
+    fi
     
     # Copy configurations
-    sudo cp -r /home/student1/.config/* "/home/$USER/.config/"
-    sudo cp -r /home/student1/.local/* "/home/$USER/.local/"
-    sudo cp /home/student1/.profile "/home/$USER/"
+    echo "Copying configurations for $USER..."
+    if ! sudo cp -r /home/student1/.config/* "/home/$USER/.config/"; then
+        echo "✗ Failed to copy .config for $USER"
+        exit 1
+    fi
+    if ! sudo cp -r /home/student1/.local/* "/home/$USER/.local/"; then
+        echo "✗ Failed to copy .local for $USER"
+        exit 1
+    fi
+    if ! sudo cp /home/student1/.profile "/home/$USER/"; then
+        echo "✗ Failed to copy .profile for $USER"
+        exit 1
+    fi
     
     # Fix ownership
+    echo "Setting permissions for $USER..."
     sudo chown -R "$USER:$USER" "/home/$USER"
 
     # Update code-server config with unique port and password
     PASSWORD=$(generate_password)
     
     # Create custom login page
-    sudo -u "$USER" mkdir -p "$USER_HOME/.local/share/code-server/assets"
     sudo -u "$USER" cat > "/home/$USER/.local/share/code-server/assets/login.html" << EOF
 <!DOCTYPE html>
 <html lang="en">
@@ -333,7 +369,7 @@ for i in $(seq 2 $NUM_USERS); do
 </html>
 EOF
 
-    # Add student $i info to markdown
+    # Add student info to markdown
     echo "Adding student $i info to markdown..."
     sudo -u ubuntu tee -a /home/ubuntu/course-info/student-passwords.md << EOF
 
@@ -342,12 +378,7 @@ EOF
 - **Password**: \`$PASSWORD\`
 EOF
 
-    # Verify the append worked
-    if ! grep -q "Student $i" /home/ubuntu/course-info/student-passwords.md; then
-        echo "✗ Failed to add student $i info to password file"
-        exit 1
-    fi
-
+    # Update code-server config
     sudo -u "$USER" cat > "/home/$USER/.config/code-server/config.yaml" << EOF
 bind-addr: 0.0.0.0:$PORT
 auth: password
