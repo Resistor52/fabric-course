@@ -15,7 +15,126 @@ NUM_USERS=10
 echo "Updating system and installing dependencies..."
 sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl software-properties-common ufw nginx certbot python3-certbot-nginx dnsutils
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl software-properties-common ufw nginx certbot python3-certbot-nginx dnsutils wamerican
+
+# Generate passwords and save them
+echo "Creating student passwords file..."
+mkdir -p /home/ubuntu/course-info
+cat > /home/ubuntu/course-info/student-passwords.md << 'EOF'
+# Student Access Information
+
+Each student has their own environment with unique credentials:
+
+EOF
+
+# Function to generate a random word-based password
+generate_password() {
+    local words=$(shuf -n 3 /usr/share/dict/american-english | tr '[:upper:]' '[:lower:]' | tr '\n' '-')
+    echo "${words}secure"
+}
+
+# Create first student user and set up their environment
+echo "Setting up first user student1..."
+USER="student1"
+PORT=$BASE_PORT
+
+# Create user
+sudo useradd -m -s /bin/bash "$USER"
+USER_HOME="/home/$USER"
+
+# Add Go environment variables to user's profile
+sudo -u "$USER" cat >> "$USER_HOME/.profile" << 'EOF'
+# Golang environment variables
+export GOROOT=/usr/local/go
+export GOPATH=$HOME/go
+export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
+EOF
+
+# Install and configure code-server for first user
+echo "Setting up code-server for $USER..."
+sudo -u "$USER" mkdir -p "$USER_HOME/.cache/code-server"
+sudo -u "$USER" curl -fL https://github.com/coder/code-server/releases/download/v4.96.2/code-server_4.96.2_amd64.deb -o "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
+DEBIAN_FRONTEND=noninteractive sudo -E dpkg -i "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
+rm -f "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
+
+# Configure code-server for first user
+sudo -u "$USER" mkdir -p "$USER_HOME/.config/code-server"
+PASSWORD=$(generate_password)
+
+# Add student 1 info to markdown
+cat >> /home/ubuntu/course-info/student-passwords.md << EOF
+
+## Student 1
+- **URL**: https://${DOMAIN}/student1/
+- **Password**: \`$PASSWORD\`
+EOF
+
+sudo -u "$USER" cat > "$USER_HOME/.config/code-server/config.yaml" << EOF
+bind-addr: 0.0.0.0:$PORT
+auth: password
+password: $PASSWORD
+cert: false
+EOF
+
+# Install and configure Fabric for first user
+sudo -u "$USER" bash -c "source $USER_HOME/.profile && go install github.com/danielmiessler/fabric@latest"
+sudo -u "$USER" mkdir -p "$USER_HOME/.config/fabric"
+sudo -u "$USER" cat > "$USER_HOME/.config/fabric/config.json" << 'EOF'
+{
+  "ollama": {
+    "url": "http://127.0.0.1:11434"
+  },
+  "default_vendor": "ollama",
+  "default_model": "mistral",
+  "language": "en"
+}
+EOF
+
+sudo -u "$USER" cat > "$USER_HOME/.config/fabric/.env" << EOF
+DEFAULT_VENDOR=Ollama
+DEFAULT_MODEL=mistral:latest
+PATTERNS_LOADER_GIT_REPO_URL=https://github.com/danielmiessler/fabric.git
+PATTERNS_LOADER_GIT_REPO_PATTERNS_FOLDER=patterns
+OLLAMA_API_URL=http://localhost:11434
+EOF
+
+# Enable code-server service for first user
+sudo systemctl enable --now "code-server@$USER"
+
+# Clone the configuration for remaining users
+for i in $(seq 2 $NUM_USERS); do
+    USER="student$i"
+    PORT=$((BASE_PORT + i - 1))
+    echo "Cloning configuration for $USER with port $PORT..."
+
+    # Create user and copy home directory structure
+    sudo useradd -m -s /bin/bash "$USER"
+    sudo cp -r /home/student1/. "/home/$USER/"
+    sudo chown -R "$USER:$USER" "/home/$USER"
+
+    # Update code-server config with unique port and password
+    PASSWORD=$(generate_password)
+    
+    # Add student info to markdown
+    cat >> /home/ubuntu/course-info/student-passwords.md << EOF
+
+## Student $i
+- **URL**: https://${DOMAIN}/student$i/
+- **Password**: \`$PASSWORD\`
+EOF
+
+    sudo -u "$USER" cat > "/home/$USER/.config/code-server/config.yaml" << EOF
+bind-addr: 0.0.0.0:$PORT
+auth: password
+password: $PASSWORD
+cert: false
+EOF
+
+    # Enable code-server service for user
+    sudo systemctl enable --now "code-server@$USER"
+done
+
+chown ubuntu:ubuntu -R /home/ubuntu/course-info
 
 # Configure firewall first
 echo "Configuring firewall..."
