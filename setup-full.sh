@@ -19,7 +19,6 @@ for i in $(seq 1 $NUM_USERS); do
 
     # Create user
     sudo useradd -m -s /bin/bash "$USER"
-    sudo usermod -aG docker "$USER"
 
     # Set up user's home directory
     USER_HOME="/home/$USER"
@@ -40,28 +39,10 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl software-properties-common ufw nginx certbot python3-certbot-nginx dnsutils
 
-# Install Docker
-echo "Installing Docker..."
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-sudo usermod -aG docker ubuntu
-rm get-docker.sh
-
 # Install NVIDIA drivers and CUDA
 echo "Installing NVIDIA drivers and CUDA..."
 sudo apt-get install -y ubuntu-drivers-common
 sudo ubuntu-drivers autoinstall
-
-# Add NVIDIA repository for container toolkit
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-sudo apt-get update
-sudo apt-get install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
 
 # Verify NVIDIA installation
 echo "Verifying NVIDIA installation..."
@@ -144,6 +125,43 @@ sudo -u ubuntu ollama run mistral "Say hello and confirm you're working"
 echo "Adding Ollama port to firewall..."
 sudo ufw allow 11434/tcp
 
+# Generate passwords and save them
+echo "Generating unique passwords for each user..."
+mkdir -p /home/ubuntu/course-info
+cat > /home/ubuntu/course-info/student-passwords.md << 'EOF'
+# Student Access Information
+
+## Code-Server Passwords
+
+EOF
+
+# Install word list if not present
+sudo apt-get install -y wamerican
+
+# Function to generate a random word-based password
+generate_password() {
+    local words=$(shuf -n 3 /usr/share/dict/american-english | tr '[:upper:]' '[:lower:]' | tr '\n' '-')
+    echo "${words}secure"
+}
+
+# Generate and save passwords for each user
+declare -A USER_PASSWORDS
+for i in $(seq 1 $NUM_USERS); do
+    USER="student$i"
+    PASSWORD=$(generate_password)
+    USER_PASSWORDS[$USER]=$PASSWORD
+    echo "- Student $i: \`$PASSWORD\`" >> /home/ubuntu/course-info/student-passwords.md
+done
+
+echo "
+## Access URLs
+
+Access your code-server instance at: https://${DOMAIN}/studentN/
+(Replace N with your student number)
+" >> /home/ubuntu/course-info/student-passwords.md
+
+chown ubuntu:ubuntu -R /home/ubuntu/course-info
+
 # Install and configure code-server for each user
 for i in $(seq 1 $NUM_USERS); do
     USER="student$i"
@@ -153,12 +171,12 @@ for i in $(seq 1 $NUM_USERS); do
     # Install code-server for user
     sudo -u "$USER" curl -fsSL https://code-server.dev/install.sh | sudo -u "$USER" sh
     
-    # Configure code-server for user
+    # Configure code-server for user with unique password
     sudo -u "$USER" mkdir -p "/home/$USER/.config/code-server"
     sudo -u "$USER" cat > "/home/$USER/.config/code-server/config.yaml" << EOF
 bind-addr: 0.0.0.0:$PORT
 auth: password
-password: ${CODE_SERVER_PASSWORD}
+password: ${USER_PASSWORDS[$USER]}
 cert: false
 EOF
 

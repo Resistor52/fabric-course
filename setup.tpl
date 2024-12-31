@@ -9,14 +9,14 @@ set -e
 
 # Download and run the main setup script
 echo "Downloading main setup script..."
-curl -fsSL -H "Authorization: token ${GITHUB_TOKEN}" https://raw.githubusercontent.com/kennethghartman/fabric-course/main/setup-full.sh -o /tmp/setup-full.sh
+curl -fsSL https://raw.githubusercontent.com/Resistor52/fabric-course/refs/heads/main/setup-full.sh -o /tmp/setup-full.sh
 chmod +x /tmp/setup-full.sh
 
 # Export variables for the main script
 export DOMAIN="${DOMAIN}"
 export EMAIL="${EMAIL}"
 export DUCKDNS_TOKEN="${DUCKDNS_TOKEN}"
-export CODE_SERVER_PASSWORD="${CODE_SERVER_PASSWORD}"
+export NUM_USERS="${NUM_USERS}"
 
 # Run the main script
 echo "Running main setup script..."

@@ -21,8 +21,7 @@ data "template_file" "setup" {
     DOMAIN              = var.domain
     EMAIL               = var.email
     DUCKDNS_TOKEN      = var.duckdns_token
-    CODE_SERVER_PASSWORD = var.code_server_password
-    GITHUB_TOKEN        = var.github_token
+    NUM_USERS           = var.number_of_users
   }
 }
 
