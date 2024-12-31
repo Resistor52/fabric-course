@@ -141,6 +141,61 @@ rm -f "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
 sudo -u "$USER" mkdir -p "$USER_HOME/.config/code-server"
 PASSWORD=$(generate_password)
 
+# Configure VS Code settings for dark theme
+sudo -u "$USER" mkdir -p "$USER_HOME/.local/share/code-server/User"
+sudo -u "$USER" cat > "$USER_HOME/.local/share/code-server/User/settings.json" << 'EOF'
+{
+    "workbench.colorTheme": "Default Dark+",
+    "workbench.startupEditor": "readme",
+    "editor.fontSize": 14,
+    "terminal.integrated.fontSize": 14,
+    "workbench.colorCustomizations": {
+        "terminal.background": "#1E1E1E"
+    }
+}
+EOF
+
+# Configure workspace
+sudo -u "$USER" mkdir -p "$USER_HOME/.local/share/code-server/Machine"
+sudo -u "$USER" cat > "$USER_HOME/.local/share/code-server/Machine/settings.json" << EOF
+{
+    "folder.uri": "file:///home/$USER/workspace"
+}
+EOF
+
+# Create custom login page
+sudo -u "$USER" mkdir -p "$USER_HOME/.local/share/code-server/assets"
+sudo -u "$USER" cat > "$USER_HOME/.local/share/code-server/assets/login.html" << EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Fabric Course - Student 1 Environment</title>
+    <link rel="stylesheet" href="{{APP_ROOT}}/static/base.css" />
+    <style>
+        body { background-color: #1e1e1e; color: #ffffff; }
+        .login-form { max-width: 400px; margin: 60px auto; padding: 20px; background-color: #2d2d2d; border-radius: 8px; }
+        h1 { color: #4a9eff; text-align: center; margin-bottom: 30px; }
+        .note { color: #bbbbbb; margin: 20px 0; text-align: center; }
+        .submit-button { background-color: #4a9eff; }
+    </style>
+</head>
+<body>
+    <div class="login-form">
+        <h1>Fabric Course</h1>
+        <div class="note">Student 1 Development Environment</div>
+        <form method="post" style="display: flex; flex-direction: column;">
+            <input type="password" name="password" placeholder="Enter your password" required />
+            <input type="submit" value="Login" class="submit-button" />
+        </form>
+        <div class="note">
+            Your password can be found in the course credentials document.
+        </div>
+    </div>
+</body>
+</html>
+EOF
+
 # Add student 1 info to markdown
 echo "Adding student 1 info to markdown..."
 sudo -u ubuntu tee -a /home/ubuntu/course-info/student-passwords.md << EOF
@@ -200,13 +255,55 @@ for i in $(seq 2 $NUM_USERS); do
 
     # Create user and copy home directory structure
     sudo useradd -m -s /bin/bash "$USER"
-    sudo cp -r /home/student1/. "/home/$USER/"
+    
+    # Create and configure workspace
+    sudo -u "$USER" mkdir -p "/home/$USER/workspace"
+    sudo -u "$USER" cp /home/ubuntu/course-content/course-readme.md "/home/$USER/workspace/"
+    sudo -u "$USER" mkdir -p "/home/$USER/workspace/.vscode"
+    
+    # Copy the rest of the configuration
+    sudo cp -r /home/student1/.config "/home/$USER/"
+    sudo cp -r /home/student1/.local "/home/$USER/"
+    sudo cp -r /home/student1/.profile "/home/$USER/"
     sudo chown -R "$USER:$USER" "/home/$USER"
 
     # Update code-server config with unique port and password
     PASSWORD=$(generate_password)
     
-    # Add student info to markdown
+    # Create custom login page
+    sudo -u "$USER" mkdir -p "$USER_HOME/.local/share/code-server/assets"
+    sudo -u "$USER" cat > "/home/$USER/.local/share/code-server/assets/login.html" << EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Fabric Course - Student $i Environment</title>
+    <link rel="stylesheet" href="{{APP_ROOT}}/static/base.css" />
+    <style>
+        body { background-color: #1e1e1e; color: #ffffff; }
+        .login-form { max-width: 400px; margin: 60px auto; padding: 20px; background-color: #2d2d2d; border-radius: 8px; }
+        h1 { color: #4a9eff; text-align: center; margin-bottom: 30px; }
+        .note { color: #bbbbbb; margin: 20px 0; text-align: center; }
+        .submit-button { background-color: #4a9eff; }
+    </style>
+</head>
+<body>
+    <div class="login-form">
+        <h1>Fabric Course</h1>
+        <div class="note">Student $i Development Environment</div>
+        <form method="post" style="display: flex; flex-direction: column;">
+            <input type="password" name="password" placeholder="Enter your password" required />
+            <input type="submit" value="Login" class="submit-button" />
+        </form>
+        <div class="note">
+            Your password can be found in the course credentials document.
+        </div>
+    </div>
+</body>
+</html>
+EOF
+
+    # Add student $i info to markdown
     echo "Adding student $i info to markdown..."
     sudo -u ubuntu tee -a /home/ubuntu/course-info/student-passwords.md << EOF
 
@@ -370,6 +467,37 @@ if [ -f "$CREDS_FILE" ]; then
 else
     echo "✗ Credentials file not found!"
 fi
+
+# Create course README
+echo "Downloading course README..."
+sudo -u ubuntu mkdir -p /home/ubuntu/course-content
+curl -fsSL https://raw.githubusercontent.com/Resistor52/fabric-course/main/course-readme.md -o /tmp/course-readme.md
+sudo -u ubuntu cp /tmp/course-readme.md /home/ubuntu/course-content/course-readme.md
+rm -f /tmp/course-readme.md
+
+# Configure first user's workspace
+sudo -u student1 mkdir -p "/home/student1/workspace"
+sudo -u student1 cp /home/ubuntu/course-content/course-readme.md "/home/student1/workspace/"
+sudo -u student1 cat > "/home/student1/.config/code-server/config.yaml" << EOF
+bind-addr: 0.0.0.0:$PORT
+auth: password
+password: $PASSWORD
+cert: false
+EOF
+
+# Add workspace configuration
+sudo -u student1 mkdir -p "/home/student1/workspace/.vscode"
+sudo -u student1 cat > "/home/student1/workspace/.vscode/settings.json" << 'EOF'
+{
+    "workbench.colorTheme": "Default Dark+",
+    "workbench.startupEditor": "none",
+    "editor.fontSize": 14,
+    "terminal.integrated.fontSize": 14,
+    "workbench.colorCustomizations": {
+        "terminal.background": "#1E1E1E"
+    }
+}
+EOF
 
 echo -e "\nSetup completed at $(date)"
 echo "Student credentials are available in: $CREDS_FILE" 
