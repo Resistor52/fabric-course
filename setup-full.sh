@@ -162,39 +162,47 @@ Access your code-server instance at: https://${DOMAIN}/studentN/
 
 chown ubuntu:ubuntu -R /home/ubuntu/course-info
 
-# Install and configure code-server for each user
-for i in $(seq 1 $NUM_USERS); do
-    USER="student$i"
-    PORT=$((BASE_PORT + i - 1))
-    echo "Setting up code-server for $USER on port $PORT..."
-    
-    # Create temporary directory for installation
-    sudo -u "$USER" mkdir -p "/home/$USER/.cache/code-server"
-    
-    # Download and install code-server without requiring terminal interaction
-    sudo -u "$USER" curl -fL https://github.com/coder/code-server/releases/download/v4.96.2/code-server_4.96.2_amd64.deb -o "/home/$USER/.cache/code-server/code-server_4.96.2_amd64.deb"
-    DEBIAN_FRONTEND=noninteractive sudo -E dpkg -i "/home/$USER/.cache/code-server/code-server_4.96.2_amd64.deb"
-    rm -f "/home/$USER/.cache/code-server/code-server_4.96.2_amd64.deb"
-    
-    # Configure code-server for user with unique password
-    sudo -u "$USER" mkdir -p "/home/$USER/.config/code-server"
-    sudo -u "$USER" cat > "/home/$USER/.config/code-server/config.yaml" << EOF
+# Create first student user and set up their environment
+USER="student1"
+PORT=$BASE_PORT
+echo "Setting up first user $USER with port $PORT..."
+
+# Create user
+sudo useradd -m -s /bin/bash "$USER"
+USER_HOME="/home/$USER"
+
+# Add Go environment variables to user's profile
+sudo -u "$USER" cat >> "$USER_HOME/.profile" << 'EOF'
+# Golang environment variables
+export GOROOT=/usr/local/go
+export GOPATH=$HOME/go
+export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
+EOF
+
+# Install and configure code-server for first user
+echo "Setting up code-server for $USER..."
+sudo -u "$USER" mkdir -p "$USER_HOME/.cache/code-server"
+sudo -u "$USER" curl -fL https://github.com/coder/code-server/releases/download/v4.96.2/code-server_4.96.2_amd64.deb -o "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
+DEBIAN_FRONTEND=noninteractive sudo -E dpkg -i "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
+rm -f "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
+
+# Configure code-server for first user
+sudo -u "$USER" mkdir -p "$USER_HOME/.config/code-server"
+PASSWORD=$(generate_password)
+USER_PASSWORDS[$USER]=$PASSWORD
+echo "- Student 1: \`$PASSWORD\`" >> /home/ubuntu/course-info/student-passwords.md
+
+sudo -u "$USER" cat > "$USER_HOME/.config/code-server/config.yaml" << EOF
 bind-addr: 0.0.0.0:$PORT
 auth: password
-password: ${USER_PASSWORDS[$USER]}
+password: $PASSWORD
 cert: false
 EOF
 
-    # Enable code-server service for user
-    sudo systemctl enable --now "code-server@$USER"
-
-    # Install and configure Fabric for user
-    echo "Setting up Fabric for $USER..."
-    sudo -u "$USER" bash -c "source /home/$USER/.profile && go install github.com/danielmiessler/fabric@latest"
-    
-    # Configure Fabric for user
-    sudo -u "$USER" mkdir -p "/home/$USER/.config/fabric"
-    sudo -u "$USER" cat > "/home/$USER/.config/fabric/config.json" << 'EOF'
+# Install and configure Fabric for first user
+sudo -u "$USER" bash -c "source $USER_HOME/.profile && go install github.com/danielmiessler/fabric@latest"
+sudo -u "$USER" mkdir -p "$USER_HOME/.config/fabric"
+sudo -u "$USER" cat > "$USER_HOME/.config/fabric/config.json" << 'EOF'
 {
   "ollama": {
     "url": "http://127.0.0.1:11434"
@@ -204,9 +212,8 @@ EOF
   "language": "en"
 }
 EOF
-    
-    # Set up Fabric environment file
-    sudo -u "$USER" cat > "/home/$USER/.config/fabric/.env" << EOF
+
+sudo -u "$USER" cat > "$USER_HOME/.config/fabric/.env" << EOF
 DEFAULT_VENDOR=Ollama
 DEFAULT_MODEL=mistral:latest
 PATTERNS_LOADER_GIT_REPO_URL=https://github.com/danielmiessler/fabric.git
@@ -214,25 +221,42 @@ PATTERNS_LOADER_GIT_REPO_PATTERNS_FOLDER=patterns
 OLLAMA_API_URL=http://localhost:11434
 EOF
 
-    # Pull patterns for user
-    sudo -u "$USER" bash -c "source /home/$USER/.profile && fabric -U && fabric -l"
+# Enable code-server service for first user
+sudo systemctl enable --now "code-server@$USER"
+
+# Clone the configuration for remaining users
+for i in $(seq 2 $NUM_USERS); do
+    USER="student$i"
+    PORT=$((BASE_PORT + i - 1))
+    echo "Cloning configuration for $USER with port $PORT..."
+
+    # Create user and copy home directory structure
+    sudo useradd -m -s /bin/bash "$USER"
+    sudo cp -r /home/student1/. "/home/$USER/"
+    sudo chown -R "$USER:$USER" "/home/$USER"
+
+    # Update code-server config with unique port and password
+    PASSWORD=$(generate_password)
+    USER_PASSWORDS[$USER]=$PASSWORD
+    echo "- Student $i: \`$PASSWORD\`" >> /home/ubuntu/course-info/student-passwords.md
+
+    sudo -u "$USER" cat > "/home/$USER/.config/code-server/config.yaml" << EOF
+bind-addr: 0.0.0.0:$PORT
+auth: password
+password: $PASSWORD
+cert: false
+EOF
+
+    # Enable code-server service for user
+    sudo systemctl enable --now "code-server@$USER"
 done
 
-# Configure Nginx for all users
-echo "Configuring Nginx..."
+# Configure Nginx for all users (HTTP first)
+echo "Configuring Nginx for HTTP..."
 sudo bash -c "cat > /etc/nginx/sites-available/${DOMAIN} <<'EOF'
 server {
     listen 80;
     server_name ${DOMAIN};
-    return 301 https://\$host\$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    server_name ${DOMAIN};
-
-    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
     # Root location block for main site
     location / {
@@ -256,64 +280,28 @@ for i in $(seq 1 $NUM_USERS); do
 EOF"
 done
 
-# Close the Nginx server block
+# Close the server block
 sudo bash -c "echo '}' >> /etc/nginx/sites-available/${DOMAIN}"
 
-echo "Setting up Nginx symlinks..."
-# Check and create symbolic link for Nginx configuration
-if [ ! -L "/etc/nginx/sites-enabled/${DOMAIN}" ]; then
-    sudo ln -s /etc/nginx/sites-available/${DOMAIN} /etc/nginx/sites-enabled/
-fi
+# Enable the site
+sudo ln -sf /etc/nginx/sites-available/${DOMAIN} /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
 
-# Remove default Nginx site if it exists
-if [ -L "/etc/nginx/sites-enabled/default" ]; then
-    sudo rm /etc/nginx/sites-enabled/default
-fi
+# Test nginx configuration
+echo "Testing nginx configuration..."
+sudo nginx -t
 
-echo "Setting up DuckDNS..."
-# Set up DuckDNS for dynamic DNS
-cat > /home/ubuntu/duckdns_update.sh << EOF
-#!/bin/bash
-echo url="https://www.duckdns.org/update?domains=${DOMAIN}&token=${DUCKDNS_TOKEN}&ip=" | curl -k -o ~/duckdns.log -K -
-EOF
-chmod +x /home/ubuntu/duckdns_update.sh
-chown ubuntu:ubuntu /home/ubuntu/duckdns_update.sh
-sudo -u ubuntu /home/ubuntu/duckdns_update.sh  # Run immediately
-sudo -u ubuntu bash -c "(crontab -l 2>/dev/null; echo \"*/5 * * * * /home/ubuntu/duckdns_update.sh\") | crontab -"
-
-# Configure firewall
-echo "Configuring firewall..."
-sudo ufw --force enable
-sudo ufw allow OpenSSH
-sudo ufw allow "Nginx Full"
-sudo ufw allow 11434/tcp  # Ollama API
-for i in $(seq 1 $NUM_USERS); do
-    PORT=$((BASE_PORT + i - 1))
-    sudo ufw allow $PORT/tcp  # Code-server ports
-done
-
-# Set up SSL with Let's Encrypt
-echo "Setting up SSL with Let's Encrypt..."
-sudo certbot --nginx -d "${DOMAIN}" --non-interactive --agree-tos -m "${EMAIL}"
-
-echo "Testing Nginx configuration..."
-# Test Nginx configuration
-if sudo nginx -t; then
-    sudo systemctl reload nginx
-else
-    echo "Nginx configuration test failed. Please check your configuration."
-    exit 1
-fi
-
-echo "Final service restarts..."
-# Restart all services
+# Restart nginx
+echo "Restarting nginx..."
 sudo systemctl restart nginx
-for i in $(seq 1 $NUM_USERS); do
-    sudo systemctl restart "code-server@student$i"
-done
 
-echo "Setup complete!"
-echo "Access code-server instances at:"
-for i in $(seq 1 $NUM_USERS); do
-    echo "Student $i: https://${DOMAIN}/student$i/"
-done 
+# Get SSL certificate
+echo "Getting SSL certificate from Let's Encrypt..."
+sudo certbot --nginx -d ${DOMAIN} --non-interactive --agree-tos --email ${EMAIL} --redirect
+
+# Update DuckDNS
+echo "Updating DuckDNS..."
+DOMAIN_PREFIX=$(echo $DOMAIN | cut -d. -f1)
+curl "https://www.duckdns.org/update?domains=${DOMAIN_PREFIX}&token=${DUCKDNS_TOKEN}&ip="
+
+echo "Setup completed at $(date)" 
