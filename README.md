@@ -47,6 +47,16 @@ This repository contains Terraform configurations to automatically deploy a mult
    terraform apply
    ```
 
+5. Monitor the setup progress:
+   ```bash
+   # SSH into the instance using the provided command
+   ssh -i aws3-use1v2.pem ubuntu@<instance-ip>
+   
+   # Monitor the setup script progress
+   sudo tail -f /var/log/user-data.log
+   ```
+   The setup is complete when you see "Main setup script completed" in the log.
+
 ## Access Information
 
 - Each student gets their own environment accessible at:
@@ -54,6 +64,7 @@ This repository contains Terraform configurations to automatically deploy a mult
 - Individual passwords are generated for each student and stored in:
   `/home/ubuntu/course-info/student-passwords.md` on the EC2 instance
 - SSH access: Use the command provided in the Terraform output
+- Additional AI Models: Students can optionally configure additional AI models by running `fabric --setup` in their environment and providing their own API keys (e.g., for OpenAI, Anthropic). This is not required for basic usage as Mistral is pre-installed and ready to use.
 
 ## Architecture
 

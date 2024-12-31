@@ -168,8 +168,13 @@ for i in $(seq 1 $NUM_USERS); do
     PORT=$((BASE_PORT + i - 1))
     echo "Setting up code-server for $USER on port $PORT..."
     
-    # Install code-server for user
-    sudo -u "$USER" curl -fsSL https://code-server.dev/install.sh | sudo -u "$USER" sh
+    # Create temporary directory for installation
+    sudo -u "$USER" mkdir -p "/home/$USER/.cache/code-server"
+    
+    # Download and install code-server without requiring terminal interaction
+    sudo -u "$USER" curl -fL https://github.com/coder/code-server/releases/download/v4.96.2/code-server_4.96.2_amd64.deb -o "/home/$USER/.cache/code-server/code-server_4.96.2_amd64.deb"
+    DEBIAN_FRONTEND=noninteractive sudo -E dpkg -i "/home/$USER/.cache/code-server/code-server_4.96.2_amd64.deb"
+    rm -f "/home/$USER/.cache/code-server/code-server_4.96.2_amd64.deb"
     
     # Configure code-server for user with unique password
     sudo -u "$USER" mkdir -p "/home/$USER/.config/code-server"
