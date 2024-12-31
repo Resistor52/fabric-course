@@ -1,0 +1,6 @@
+terraform.tfvars
+.terraform
+*.tfstate
+*.tfstate.*
+setup.sh
+backend.tf 

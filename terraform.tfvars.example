@@ -1,0 +1,4 @@
+domain               = "your-domain.duckdns.org"
+email                = "your-email@example.com"
+duckdns_token        = "your-duckdns-token"
+code_server_password = "your-secure-password" 
