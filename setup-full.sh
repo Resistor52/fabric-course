@@ -87,13 +87,25 @@ sudo -u ubuntu ollama pull mistral
 
 # Generate passwords and save them
 echo "Creating student passwords file..."
-mkdir -p /home/ubuntu/course-info
-cat > /home/ubuntu/course-info/student-passwords.md << 'EOF'
+sudo mkdir -p /home/ubuntu/course-info
+sudo chown ubuntu:ubuntu /home/ubuntu/course-info
+
+echo "Writing initial markdown content..."
+sudo -u ubuntu tee /home/ubuntu/course-info/student-passwords.md << 'EOF'
 # Student Access Information
 
 Each student has their own environment with unique credentials:
 
 EOF
+
+# Verify file was created
+if [ -f /home/ubuntu/course-info/student-passwords.md ]; then
+    echo "✓ Password file created successfully"
+    ls -l /home/ubuntu/course-info/student-passwords.md
+else
+    echo "✗ Failed to create password file"
+    exit 1
+fi
 
 # Function to generate a random word-based password
 generate_password() {
@@ -130,12 +142,19 @@ sudo -u "$USER" mkdir -p "$USER_HOME/.config/code-server"
 PASSWORD=$(generate_password)
 
 # Add student 1 info to markdown
-cat >> /home/ubuntu/course-info/student-passwords.md << EOF
+echo "Adding student 1 info to markdown..."
+sudo -u ubuntu tee -a /home/ubuntu/course-info/student-passwords.md << EOF
 
 ## Student 1
 - **URL**: https://${DOMAIN}/student1/
 - **Password**: \`$PASSWORD\`
 EOF
+
+# Verify the append worked
+if ! grep -q "Student 1" /home/ubuntu/course-info/student-passwords.md; then
+    echo "✗ Failed to add student 1 info to password file"
+    exit 1
+fi
 
 sudo -u "$USER" cat > "$USER_HOME/.config/code-server/config.yaml" << EOF
 bind-addr: 0.0.0.0:$PORT
@@ -188,12 +207,19 @@ for i in $(seq 2 $NUM_USERS); do
     PASSWORD=$(generate_password)
     
     # Add student info to markdown
-    cat >> /home/ubuntu/course-info/student-passwords.md << EOF
+    echo "Adding student $i info to markdown..."
+    sudo -u ubuntu tee -a /home/ubuntu/course-info/student-passwords.md << EOF
 
 ## Student $i
 - **URL**: https://${DOMAIN}/student$i/
 - **Password**: \`$PASSWORD\`
 EOF
+
+    # Verify the append worked
+    if ! grep -q "Student $i" /home/ubuntu/course-info/student-passwords.md; then
+        echo "✗ Failed to add student $i info to password file"
+        exit 1
+    fi
 
     sudo -u "$USER" cat > "/home/$USER/.config/code-server/config.yaml" << EOF
 bind-addr: 0.0.0.0:$PORT
@@ -318,5 +344,32 @@ for i in $(seq 1 $NUM_USERS); do
     fi
 done
 
+# Verify credentials file
+echo -e "\nVerifying credentials file..."
+CREDS_FILE="/home/ubuntu/course-info/student-passwords.md"
+if [ -f "$CREDS_FILE" ]; then
+    echo "✓ Credentials file exists"
+    
+    # Check file permissions
+    if [ "$(stat -c %U:%G $CREDS_FILE)" = "ubuntu:ubuntu" ]; then
+        echo "✓ File has correct ownership"
+    else
+        echo "✗ Incorrect file ownership: $(stat -c %U:%G $CREDS_FILE)"
+    fi
+    
+    # Check content
+    if grep -q "Student ${NUM_USERS}" "$CREDS_FILE"; then
+        echo "✓ File contains all student entries"
+        echo "File contents:"
+        echo "----------------------------------------"
+        cat "$CREDS_FILE"
+        echo "----------------------------------------"
+    else
+        echo "✗ File appears to be missing some student entries"
+    fi
+else
+    echo "✗ Credentials file not found!"
+fi
+
 echo -e "\nSetup completed at $(date)"
-echo "Student credentials are available in: /home/ubuntu/course-info/student-passwords.md" 
+echo "Student credentials are available in: $CREDS_FILE" 
