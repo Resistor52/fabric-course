@@ -39,6 +39,52 @@ echo "Checksum verified, extracting..."
 sudo tar -C /usr/local -xzf $LATEST_GO.linux-amd64.tar.gz
 rm $LATEST_GO.linux-amd64.tar.gz
 
+# Install and configure Ollama
+echo "Installing Ollama..."
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Create Ollama systemd service manually
+echo "Creating Ollama systemd service..."
+cat > /etc/systemd/system/ollama.service << 'EOF'
+[Unit]
+Description=Ollama Service
+After=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Environment="HOME=/home/ubuntu"
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="OLLAMA_HOST=0.0.0.0"
+ExecStart=/usr/local/bin/ollama serve
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Start Ollama service
+echo "Starting Ollama service..."
+systemctl daemon-reload
+systemctl enable ollama
+systemctl start ollama
+
+# Wait for Ollama to be ready
+echo "Waiting for Ollama to be ready..."
+for i in {1..30}; do
+    if curl -s http://localhost:11434/api/tags >/dev/null; then
+        echo "Ollama is ready!"
+        break
+    fi
+    echo "Waiting for Ollama to start... (attempt $i/30)"
+    sleep 2
+done
+
+# Pull the Mistral model
+echo "Pulling Mistral model..."
+sudo -u ubuntu ollama pull mistral
+
 # Generate passwords and save them
 echo "Creating student passwords file..."
 mkdir -p /home/ubuntu/course-info
