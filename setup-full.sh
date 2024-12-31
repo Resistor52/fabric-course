@@ -93,9 +93,27 @@ sudo chown ubuntu:ubuntu /home/ubuntu/course-info
 # Create course README
 echo "Downloading course README..."
 sudo -u ubuntu mkdir -p /home/ubuntu/course-content
-curl -fsSL https://raw.githubusercontent.com/Resistor52/fabric-course/main/course-readme.md -o /tmp/course-readme.md
+sudo chown ubuntu:ubuntu /home/ubuntu/course-content
+
+# Download README with error checking
+if ! curl -fsSL https://raw.githubusercontent.com/Resistor52/fabric-course/main/course-readme.md -o /tmp/course-readme.md; then
+    echo "✗ Failed to download course-readme.md"
+    exit 1
+fi
+
+# Copy and set permissions
 sudo -u ubuntu cp /tmp/course-readme.md /home/ubuntu/course-content/course-readme.md
+sudo chmod 644 /home/ubuntu/course-content/course-readme.md
 rm -f /tmp/course-readme.md
+
+# Verify README exists and has correct permissions
+if [ -f /home/ubuntu/course-content/course-readme.md ]; then
+    echo "✓ Course README downloaded successfully"
+    ls -l /home/ubuntu/course-content/course-readme.md
+else
+    echo "✗ Failed to create course README"
+    exit 1
+fi
 
 echo "Writing initial markdown content..."
 sudo -u ubuntu tee /home/ubuntu/course-info/student-passwords.md << 'EOF'
@@ -265,7 +283,12 @@ for i in $(seq 2 $NUM_USERS); do
     
     # Create and configure workspace
     sudo -u "$USER" mkdir -p "/home/$USER/workspace"
-    sudo -u "$USER" cp /home/ubuntu/course-content/course-readme.md "/home/$USER/workspace/"
+    echo "Copying course README for $USER..."
+    if ! sudo cp /home/ubuntu/course-content/course-readme.md "/home/$USER/workspace/"; then
+        echo "✗ Failed to copy course README for $USER"
+        exit 1
+    fi
+    sudo chown "$USER:$USER" "/home/$USER/workspace/course-readme.md"
     sudo -u "$USER" mkdir -p "/home/$USER/workspace/.vscode"
     
     # Copy the rest of the configuration
