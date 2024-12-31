@@ -120,6 +120,10 @@ PATTERNS_LOADER_GIT_REPO_PATTERNS_FOLDER=patterns
 OLLAMA_API_URL=http://localhost:11434
 EOF
 
+# Download patterns for first user
+echo "Downloading patterns for $USER..."
+sudo -u "$USER" bash -c "source $USER_HOME/.profile && fabric -U"
+
 # Enable code-server service for first user
 sudo systemctl enable --now "code-server@$USER"
 
@@ -236,4 +240,37 @@ done
 echo "Getting SSL certificate from Let's Encrypt..."
 sudo certbot --nginx -d ${DOMAIN} --non-interactive --agree-tos --email ${EMAIL} --redirect
 
-echo "Setup completed at $(date)" 
+# Final testing
+echo "Performing final tests..."
+
+# Test Ollama
+echo "Testing Ollama service..."
+if curl -s http://localhost:11434/api/tags > /dev/null; then
+    echo "✓ Ollama service is running"
+else
+    echo "✗ Ollama service is not responding"
+fi
+
+# Test each student's code-server instance
+echo -e "\nTesting code-server instances..."
+for i in $(seq 1 $NUM_USERS); do
+    echo "Testing student$i environment..."
+    
+    # Test code-server
+    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/student$i/")
+    if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "302" ]; then
+        echo "✓ code-server for student$i is accessible"
+    else
+        echo "✗ code-server for student$i returned status $RESPONSE"
+    fi
+    
+    # Test if service is running
+    if systemctl is-active --quiet code-server@student$i; then
+        echo "✓ code-server@student$i service is running"
+    else
+        echo "✗ code-server@student$i service is not running"
+    fi
+done
+
+echo -e "\nSetup completed at $(date)"
+echo "Student credentials are available in: /home/ubuntu/course-info/student-passwords.md" 
