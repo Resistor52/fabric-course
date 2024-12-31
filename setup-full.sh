@@ -12,7 +12,10 @@ BASE_PORT=8080
 NUM_USERS=10
 
 # System updates and base installations
-echo "Updating system and installing dependencies..." 
+echo "Updating system and installing dependencies..."
+sudo DEBIAN_FRONTEND=noninteractive apt-get update
+sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl software-properties-common ufw nginx certbot python3-certbot-nginx dnsutils
 
 # Configure firewall first
 echo "Configuring firewall..."
