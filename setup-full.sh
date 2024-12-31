@@ -208,39 +208,6 @@ sudo -u "$USER" cat > "$USER_HOME/.local/share/code-server/Machine/settings.json
 }
 EOF
 
-# Create custom login page
-sudo -u "$USER" mkdir -p "$USER_HOME/.local/share/code-server/assets"
-sudo -u "$USER" cat > "$USER_HOME/.local/share/code-server/assets/login.html" << EOF
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <title>Fabric Course - Student 1 Environment</title>
-    <link rel="stylesheet" href="{{APP_ROOT}}/static/base.css" />
-    <style>
-        body { background-color: #1e1e1e; color: #ffffff; }
-        .login-form { max-width: 400px; margin: 60px auto; padding: 20px; background-color: #2d2d2d; border-radius: 8px; }
-        h1 { color: #4a9eff; text-align: center; margin-bottom: 30px; }
-        .note { color: #bbbbbb; margin: 20px 0; text-align: center; }
-        .submit-button { background-color: #4a9eff; }
-    </style>
-</head>
-<body>
-    <div class="login-form">
-        <h1>Fabric Course</h1>
-        <div class="note">Student 1 Development Environment</div>
-        <form method="post" style="display: flex; flex-direction: column;">
-            <input type="password" name="password" placeholder="Enter your password" required />
-            <input type="submit" value="Login" class="submit-button" />
-        </form>
-        <div class="note">
-            Your password can be found in the course credentials document.
-        </div>
-    </div>
-</body>
-</html>
-EOF
-
 # Configure code-server with custom assets path
 sudo -u "$USER" cat > "$USER_HOME/.config/code-server/config.yaml" << EOF
 bind-addr: 0.0.0.0:$PORT
@@ -251,7 +218,7 @@ user-data-dir: /home/$USER/.local/share/code-server
 extensions-dir: /home/$USER/.local/share/code-server/extensions
 EOF
 
-# Create systemd override for custom assets
+# Create systemd override
 sudo mkdir -p /etc/systemd/system/code-server@${USER}.service.d
 sudo cat > /etc/systemd/system/code-server@${USER}.service.d/override.conf << EOF
 [Service]
@@ -331,7 +298,6 @@ for i in $(seq 2 $NUM_USERS); do
     sudo mkdir -p "/home/$USER/.config/fabric"
     sudo mkdir -p "/home/$USER/.config/code-server"
     sudo mkdir -p "/home/$USER/.local"
-    sudo mkdir -p "/home/$USER/.local/share/code-server/assets"
     sudo mkdir -p "/home/$USER/.local/share/code-server/User"
     sudo mkdir -p "/home/$USER/.local/share/code-server/Machine"
     sudo mkdir -p "/home/$USER/.local/share/code-server/extensions"
@@ -378,7 +344,14 @@ user-data-dir: /home/$USER/.local/share/code-server
 extensions-dir: /home/$USER/.local/share/code-server/extensions
 EOF
 
-    # Create systemd override for custom assets
+    # Configure workspace settings
+    sudo -u "$USER" cat > "/home/$USER/.local/share/code-server/Machine/settings.json" << EOF
+{
+    "folder.uri": "file:///home/$USER/workspace"
+}
+EOF
+
+    # Create systemd override
     sudo mkdir -p /etc/systemd/system/code-server@${USER}.service.d
     sudo cat > /etc/systemd/system/code-server@${USER}.service.d/override.conf << EOF
 [Service]
@@ -420,6 +393,18 @@ done
 
 # Configure Nginx for all users (HTTP first)
 echo "Configuring Nginx for HTTP..."
+
+# Create custom login style file
+echo "Creating custom login styles..."
+sudo mkdir -p /etc/nginx/code-server/
+sudo tee /etc/nginx/code-server/custom-login.css << EOF
+body { background-color: #1e1e1e !important; color: #ffffff !important; }
+.login-form { max-width: 400px !important; margin: 60px auto !important; padding: 20px !important; background-color: #2d2d2d !important; border-radius: 8px !important; }
+h1 { color: #4a9eff !important; text-align: center !important; margin-bottom: 30px !important; }
+.note { color: #bbbbbb !important; margin: 20px 0 !important; text-align: center !important; }
+.submit-button { background-color: #4a9eff !important; }
+EOF
+
 sudo bash -c "cat > /etc/nginx/sites-available/${DOMAIN} <<'EOF'
 server {
     listen 80;
@@ -428,6 +413,11 @@ server {
     # Root location block for main site
     location / {
         return 200 'Welcome to Fabric Course. Please use your assigned subdirectory.';
+    }
+
+    # Serve custom login CSS
+    location /custom-login.css {
+        alias /etc/nginx/code-server/custom-login.css;
     }
 EOF"
 
@@ -443,6 +433,8 @@ for i in $(seq 1 $NUM_USERS); do
         proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
         proxy_set_header Upgrade \\\$http_upgrade;
         proxy_set_header Connection upgrade;
+        sub_filter '</head>' '<link rel="stylesheet" href="/custom-login.css"></head>';
+        sub_filter_once on;
     }
 EOF"
 done
@@ -543,3 +535,6 @@ fi
 
 echo -e "\nSetup completed at $(date)"
 echo "Student credentials are available in: $CREDS_FILE" 
+
+# Test and reload nginx
+sudo nginx -t && sudo systemctl reload nginx 
