@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Enable logging
+# Enable logging for the entire setup process
 exec 1> >(tee -a /var/log/user-data.log) 2>&1
 echo "Setup script started at $(date)"
 
@@ -20,4 +20,4 @@ export NUM_USERS="${NUM_USERS}"
 
 # Run the main script
 echo "Running main setup script..."
-/tmp/setup-full.sh 
+bash /tmp/setup-full.sh 
