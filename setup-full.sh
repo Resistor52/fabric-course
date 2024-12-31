@@ -278,23 +278,23 @@ for i in $(seq 2 $NUM_USERS); do
     PORT=$((BASE_PORT + i - 1))
     echo "Cloning configuration for $USER with port $PORT..."
 
-    # Create user and copy home directory structure
+    # Create user and base directories
     sudo useradd -m -s /bin/bash "$USER"
+    sudo mkdir -p "/home/$USER/workspace"
+    sudo mkdir -p "/home/$USER/workspace/.vscode"
+    sudo mkdir -p "/home/$USER/.config"
+    sudo mkdir -p "/home/$USER/.local"
     
-    # Create and configure workspace
-    sudo -u "$USER" mkdir -p "/home/$USER/workspace"
+    # Copy course README
     echo "Copying course README for $USER..."
-    if ! sudo cp /home/ubuntu/course-content/course-readme.md "/home/$USER/workspace/"; then
-        echo "✗ Failed to copy course README for $USER"
-        exit 1
-    fi
-    sudo chown "$USER:$USER" "/home/$USER/workspace/course-readme.md"
-    sudo -u "$USER" mkdir -p "/home/$USER/workspace/.vscode"
+    sudo cp /home/ubuntu/course-content/course-readme.md "/home/$USER/workspace/"
     
-    # Copy the rest of the configuration
-    sudo cp -r /home/student1/.config "/home/$USER/"
-    sudo cp -r /home/student1/.local "/home/$USER/"
-    sudo cp -r /home/student1/.profile "/home/$USER/"
+    # Copy configurations
+    sudo cp -r /home/student1/.config/* "/home/$USER/.config/"
+    sudo cp -r /home/student1/.local/* "/home/$USER/.local/"
+    sudo cp /home/student1/.profile "/home/$USER/"
+    
+    # Fix ownership
     sudo chown -R "$USER:$USER" "/home/$USER"
 
     # Update code-server config with unique port and password
