@@ -18,9 +18,9 @@ data "aws_ami" "ubuntu" {
 data "template_file" "setup" {
   template = file("${path.module}/setup.tpl")
   vars = {
-    DOMAIN         = var.domain
-    EMAIL          = var.email
-    DUCKDNS_TOKEN  = var.duckdns_token
+    DOMAIN              = var.domain
+    EMAIL               = var.email
+    DUCKDNS_TOKEN      = var.duckdns_token
     CODE_SERVER_PASSWORD = var.code_server_password
   }
 }

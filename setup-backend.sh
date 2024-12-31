@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Disable AWS CLI pager
+export AWS_PAGER=""
+
 # Generate random suffix
 SUFFIX=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 8)
 BUCKET_NAME="fabric-course-state-$SUFFIX"
