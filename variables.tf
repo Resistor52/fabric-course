@@ -18,4 +18,10 @@ variable "code_server_password" {
   description = "Password for code-server"
   type        = string
   sensitive   = true
+}
+
+variable "github_token" {
+  description = "GitHub Personal Access Token for accessing private repositories"
+  type        = string
+  sensitive   = true
 } 

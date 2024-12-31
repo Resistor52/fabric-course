@@ -22,23 +22,26 @@ data "template_file" "setup" {
     EMAIL               = var.email
     DUCKDNS_TOKEN      = var.duckdns_token
     CODE_SERVER_PASSWORD = var.code_server_password
+    GITHUB_TOKEN        = var.github_token
   }
 }
 
 resource "aws_instance" "fabric_course" {
   ami           = data.aws_ami.ubuntu.id
-  instance_type = "t3.medium"
+  instance_type = "g5.xlarge"
   key_name      = "aws3-use1v2"
+
+  # Required for GPU instances
+  root_block_device {
+    volume_size = 30
+    volume_type = "gp3"
+  }
 
   subnet_id                   = aws_subnet.public.id
   vpc_security_group_ids      = [aws_security_group.fabric_course.id]
   associate_public_ip_address = true
 
   user_data = base64encode(data.template_file.setup.rendered)
-
-  root_block_device {
-    volume_size = 20
-  }
 
   lifecycle {
     ignore_changes = [
