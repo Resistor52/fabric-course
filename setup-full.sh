@@ -173,6 +173,10 @@ echo "✓ code-server installed successfully"
 sudo -u "$USER" mkdir -p "$USER_HOME/.config/code-server"
 PASSWORD=$(generate_password)
 
+# Create and configure workspace
+sudo -u "$USER" mkdir -p "$USER_HOME/workspace"
+sudo -u "$USER" cp /home/ubuntu/course-content/course-readme.md "$USER_HOME/workspace/"
+
 # Configure VS Code settings for dark theme
 sudo -u "$USER" mkdir -p "$USER_HOME/.local/share/code-server/User"
 sudo -u "$USER" cat > "$USER_HOME/.local/share/code-server/User/settings.json" << 'EOF'
@@ -228,6 +232,27 @@ sudo -u "$USER" cat > "$USER_HOME/.local/share/code-server/assets/login.html" <<
 </html>
 EOF
 
+# Configure code-server with custom assets path
+sudo -u "$USER" cat > "$USER_HOME/.config/code-server/config.yaml" << EOF
+bind-addr: 0.0.0.0:$PORT
+auth: password
+password: $PASSWORD
+cert: false
+user-data-dir: /home/$USER/.local/share/code-server
+extensions-dir: /home/$USER/.local/share/code-server/extensions
+EOF
+
+# Create systemd override for custom assets
+sudo mkdir -p /etc/systemd/system/code-server@${USER}.service.d
+sudo cat > /etc/systemd/system/code-server@${USER}.service.d/override.conf << EOF
+[Service]
+Environment="VSCODE_PROXY_URI={{root}}"
+Environment="CS_DISABLE_FILE_DOWNLOADS=false"
+Environment="CS_DISABLE_GETTING_STARTED_OVERRIDE=1"
+Environment="CS_DISABLE_TELEMETRY=1"
+Environment="CS_USER_DATA_DIR=/home/$USER/.local/share/code-server"
+EOF
+
 # Add student 1 info to markdown
 echo "Adding student 1 info to markdown..."
 sudo -u ubuntu tee -a /home/ubuntu/course-info/student-passwords.md << EOF
@@ -242,13 +267,6 @@ if ! grep -q "Student 1" /home/ubuntu/course-info/student-passwords.md; then
     echo "✗ Failed to add student 1 info to password file"
     exit 1
 fi
-
-sudo -u "$USER" cat > "$USER_HOME/.config/code-server/config.yaml" << EOF
-bind-addr: 0.0.0.0:$PORT
-auth: password
-password: $PASSWORD
-cert: false
-EOF
 
 # Install and configure Fabric for first user
 sudo -u "$USER" bash -c "source $USER_HOME/.profile && go install github.com/danielmiessler/fabric@latest"
@@ -307,6 +325,7 @@ for i in $(seq 2 $NUM_USERS); do
     sudo mkdir -p "/home/$USER/.local/share/code-server/assets"
     sudo mkdir -p "/home/$USER/.local/share/code-server/User"
     sudo mkdir -p "/home/$USER/.local/share/code-server/Machine"
+    sudo mkdir -p "/home/$USER/.local/share/code-server/extensions"
     
     # Copy course README
     echo "Copying course README for $USER..."
@@ -337,36 +356,25 @@ for i in $(seq 2 $NUM_USERS); do
     # Update code-server config with unique port and password
     PASSWORD=$(generate_password)
     
-    # Create custom login page
-    sudo -u "$USER" cat > "/home/$USER/.local/share/code-server/assets/login.html" << EOF
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <title>Fabric Course - Student $i Environment</title>
-    <link rel="stylesheet" href="{{APP_ROOT}}/static/base.css" />
-    <style>
-        body { background-color: #1e1e1e; color: #ffffff; }
-        .login-form { max-width: 400px; margin: 60px auto; padding: 20px; background-color: #2d2d2d; border-radius: 8px; }
-        h1 { color: #4a9eff; text-align: center; margin-bottom: 30px; }
-        .note { color: #bbbbbb; margin: 20px 0; text-align: center; }
-        .submit-button { background-color: #4a9eff; }
-    </style>
-</head>
-<body>
-    <div class="login-form">
-        <h1>Fabric Course</h1>
-        <div class="note">Student $i Development Environment</div>
-        <form method="post" style="display: flex; flex-direction: column;">
-            <input type="password" name="password" placeholder="Enter your password" required />
-            <input type="submit" value="Login" class="submit-button" />
-        </form>
-        <div class="note">
-            Your password can be found in the course credentials document.
-        </div>
-    </div>
-</body>
-</html>
+    # Configure code-server with custom assets path
+    sudo -u "$USER" cat > "/home/$USER/.config/code-server/config.yaml" << EOF
+bind-addr: 0.0.0.0:$PORT
+auth: password
+password: $PASSWORD
+cert: false
+user-data-dir: /home/$USER/.local/share/code-server
+extensions-dir: /home/$USER/.local/share/code-server/extensions
+EOF
+
+    # Create systemd override for custom assets
+    sudo mkdir -p /etc/systemd/system/code-server@${USER}.service.d
+    sudo cat > /etc/systemd/system/code-server@${USER}.service.d/override.conf << EOF
+[Service]
+Environment="VSCODE_PROXY_URI={{root}}"
+Environment="CS_DISABLE_FILE_DOWNLOADS=false"
+Environment="CS_DISABLE_GETTING_STARTED_OVERRIDE=1"
+Environment="CS_DISABLE_TELEMETRY=1"
+Environment="CS_USER_DATA_DIR=/home/$USER/.local/share/code-server"
 EOF
 
     # Add student info to markdown
@@ -376,14 +384,6 @@ EOF
 ## Student $i
 - **URL**: https://${DOMAIN}/student$i/
 - **Password**: \`$PASSWORD\`
-EOF
-
-    # Update code-server config
-    sudo -u "$USER" cat > "/home/$USER/.config/code-server/config.yaml" << EOF
-bind-addr: 0.0.0.0:$PORT
-auth: password
-password: $PASSWORD
-cert: false
 EOF
 
     # Enable code-server service for user
