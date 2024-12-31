@@ -101,17 +101,20 @@ if ! curl -fsSL https://raw.githubusercontent.com/Resistor52/fabric-course/main/
     exit 1
 fi
 
-# Copy and set permissions
-sudo -u ubuntu cp /tmp/course-readme.md /home/ubuntu/course-content/course-readme.md
+# Copy and set permissions with verbose output
+echo "Setting up course README..."
+sudo cp /tmp/course-readme.md /home/ubuntu/course-content/course-readme.md
+sudo chown ubuntu:ubuntu /home/ubuntu/course-content/course-readme.md
 sudo chmod 644 /home/ubuntu/course-content/course-readme.md
 rm -f /tmp/course-readme.md
 
 # Verify README exists and has correct permissions
 if [ -f /home/ubuntu/course-content/course-readme.md ]; then
     echo "✓ Course README downloaded successfully"
-    ls -l /home/ubuntu/course-content/course-readme.md
+    ls -la /home/ubuntu/course-content/course-readme.md
 else
     echo "✗ Failed to create course README"
+    ls -la /home/ubuntu/course-content/
     exit 1
 fi
 
@@ -175,7 +178,13 @@ PASSWORD=$(generate_password)
 
 # Create and configure workspace
 sudo -u "$USER" mkdir -p "$USER_HOME/workspace"
-sudo -u "$USER" cp /home/ubuntu/course-content/course-readme.md "$USER_HOME/workspace/"
+echo "Copying course README for student1..."
+if ! sudo cp /home/ubuntu/course-content/course-readme.md "$USER_HOME/workspace/"; then
+    echo "✗ Failed to copy course README for student1"
+    ls -la /home/ubuntu/course-content/
+    exit 1
+fi
+sudo chown "$USER:$USER" "$USER_HOME/workspace/course-readme.md"
 
 # Configure VS Code settings for dark theme
 sudo -u "$USER" mkdir -p "$USER_HOME/.local/share/code-server/User"
@@ -331,8 +340,11 @@ for i in $(seq 2 $NUM_USERS); do
     echo "Copying course README for $USER..."
     if ! sudo cp /home/ubuntu/course-content/course-readme.md "/home/$USER/workspace/"; then
         echo "✗ Failed to copy course README for $USER"
+        ls -la /home/ubuntu/course-content/
         exit 1
     fi
+    sudo chown "$USER:$USER" "/home/$USER/workspace/course-readme.md"
+    echo "✓ Course README copied successfully for $USER"
     
     # Copy configurations
     echo "Copying configurations for $USER..."
