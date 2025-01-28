@@ -43,7 +43,6 @@ This repository contains Terraform configurations to automatically deploy a mult
 4. Deploy the infrastructure:
    ```bash
    terraform init
-   terraform plan
    terraform apply
    ```
 

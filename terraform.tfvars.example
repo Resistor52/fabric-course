@@ -1,4 +1,6 @@
 domain               = "your-domain.duckdns.org"
 email                = "your-email@example.com"
 duckdns_token        = "your-duckdns-token"
-code_server_password = "your-secure-password" 
+code_server_password = "your-secure-password"
+ssh_key_name         = "your-aws-key-name"
+ssh_pem_file         = "/path/to/your/key.pem" 

@@ -28,7 +28,7 @@ data "template_file" "setup" {
 resource "aws_instance" "fabric_course" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = "g5.xlarge"
-  key_name      = "aws3-use1v2"
+  key_name      = var.ssh_key_name
 
   # Required for GPU instances
   root_block_device {
@@ -64,6 +64,6 @@ output "public_ip" {
 
 # Add SSH command output
 output "ssh_command" {
-  value = "ssh -i aws3-use1v2.pem ubuntu@${aws_instance.fabric_course.public_ip}"
+  value = "ssh -i ${var.ssh_pem_file} ubuntu@${aws_instance.fabric_course.public_ip}"
   depends_on = [aws_instance.fabric_course]
 } 
