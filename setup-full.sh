@@ -11,11 +11,59 @@ set -e
 BASE_PORT=8080
 NUM_USERS=10
 
+# Function to check disk space and clean if needed
+check_disk_space() {
+    local threshold=80  # Percentage threshold
+    local used_percent=$(df / | awk 'NR==2 {print $5}' | tr -d '%')
+    
+    echo "Current disk usage: ${used_percent}%"
+    
+    if [ "$used_percent" -gt "$threshold" ]; then
+        echo "Disk usage is high. Cleaning up..."
+        
+        # Clean apt cache
+        sudo apt-get clean
+        sudo apt-get autoremove -y
+        
+        # Clean temporary files
+        sudo rm -rf /tmp/*
+        sudo rm -rf /var/tmp/*
+        
+        # Clean journal logs
+        sudo journalctl --vacuum-time=1d
+        
+        # Remove old downloaded packages
+        sudo rm -rf /var/cache/apt/archives/*.deb
+        
+        # Check space again
+        used_percent=$(df / | awk 'NR==2 {print $5}' | tr -d '%')
+        echo "Disk usage after cleanup: ${used_percent}%"
+        
+        if [ "$used_percent" -gt "$threshold" ]; then
+            echo "✗ Warning: Disk usage is still high after cleanup"
+        fi
+    fi
+}
+
+# Function to clean up downloaded files
+cleanup_downloads() {
+    echo "Cleaning up downloaded files..."
+    rm -f "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
+    rm -f /tmp/practice_files.zip
+    sudo apt-get clean
+}
+
+# Initial disk space check
+echo "Checking initial disk space..."
+check_disk_space
+
 # System updates and base installations
 echo "Updating system and installing dependencies..."
 sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+check_disk_space  # Check space after upgrade
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl software-properties-common ufw nginx certbot python3-certbot-nginx dnsutils wamerican unzip
+check_disk_space  # Check space after installations
 
 # Install Go (required for Fabric)
 echo "Installing Go..."
@@ -185,9 +233,29 @@ EOF
 # Install and configure code-server for first user
 echo "Setting up code-server for $USER..."
 sudo -u "$USER" mkdir -p "$USER_HOME/.cache/code-server"
-sudo -u "$USER" curl -fL https://github.com/coder/code-server/releases/download/v4.96.2/code-server_4.96.2_amd64.deb -o "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
-DEBIAN_FRONTEND=noninteractive sudo -E dpkg -i "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
-rm -f "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
+
+# Check space before downloading code-server
+check_disk_space
+
+echo "Downloading code-server..."
+if ! sudo -u "$USER" curl -fL https://github.com/coder/code-server/releases/download/v4.96.2/code-server_4.96.2_amd64.deb -o "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"; then
+    echo "✗ Failed to download code-server"
+    exit 1
+fi
+
+# Install code-server with error handling
+echo "Installing code-server..."
+if ! DEBIAN_FRONTEND=noninteractive sudo -E dpkg -i "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"; then
+    echo "First attempt to install code-server failed, trying to fix..."
+    sudo apt-get -f install -y
+    if ! DEBIAN_FRONTEND=noninteractive sudo -E dpkg -i "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"; then
+        echo "✗ Failed to install code-server after retry"
+        exit 1
+    fi
+fi
+
+# Clean up code-server download
+cleanup_downloads
 
 # Verify code-server installation
 if ! which code-server > /dev/null; then
@@ -413,6 +481,9 @@ echo "Downloading patterns for $USER..."
 RETRY_COUNT=0
 MAX_RETRIES=3
 
+# Check space before downloading patterns
+check_disk_space
+
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     if sudo -u "$USER" bash -c "source $USER_HOME/.profile && fabric -U"; then
         echo "✓ Successfully downloaded Fabric patterns for $USER"
@@ -421,6 +492,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         RETRY_COUNT=$((RETRY_COUNT + 1))
         if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
             echo "Retry $RETRY_COUNT: Failed to download patterns, waiting 10 seconds..."
+            check_disk_space  # Check space before retry
             sleep 10
         else
             echo "✗ Failed to download Fabric patterns after $MAX_RETRIES attempts"
@@ -428,6 +500,9 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         fi
     fi
 done
+
+# Final cleanup
+cleanup_downloads
 
 # Verify Fabric installation and patterns for first user
 echo "Verifying Fabric setup for $USER..."
@@ -456,7 +531,16 @@ for i in $(seq 2 $NUM_USERS); do
 
     # Create user and base directories
     sudo useradd -m -s /bin/bash "$USER"
+    
+    # Create all necessary directories first
+    echo "Creating directory structure for $USER..."
     sudo mkdir -p "/home/$USER/workspace"
+    sudo mkdir -p "/home/$USER/workspace/.vscode"
+    sudo mkdir -p "/home/$USER/.config"
+    sudo mkdir -p "/home/$USER/.local/share/code-server/User"
+    sudo mkdir -p "/home/$USER/.local/share/code-server/Machine"
+    sudo mkdir -p "/home/$USER/.local/share/code-server/extensions"
+    sudo mkdir -p "/home/$USER/go/bin"
     
     # Extract practice files for this student
     echo "Extracting practice files for $USER..."
@@ -471,23 +555,16 @@ for i in $(seq 2 $NUM_USERS); do
 
     # Copy Fabric binary from student1's Go path to this user's Go path
     echo "Copying Fabric binary for $USER..."
-    sudo mkdir -p "/home/$USER/go/bin"
     sudo cp /home/student1/go/bin/fabric "/home/$USER/go/bin/"
     sudo chown -R "$USER:$USER" "/home/$USER/go"
 
     # Copy Fabric configuration and patterns
     echo "Copying Fabric configuration and patterns for $USER..."
-    sudo cp -r /home/student1/.config/fabric "/home/$USER/.config/"
-    sudo chown -R "$USER:$USER" "/home/$USER/.config/fabric"
+    sudo mkdir -p "/home/$USER/.config/fabric"
+    sudo cp -r /home/student1/.config/fabric/* "/home/$USER/.config/fabric/"
+    sudo chown -R "$USER:$USER" "/home/$USER/.config"
     sudo chmod -R 755 "/home/$USER/.config/fabric"
     sudo chmod -R u+w "/home/$USER/.config/fabric/patterns"
-
-    # Continue with the rest of user setup...
-    sudo mkdir -p "/home/$USER/workspace/.vscode"
-    sudo mkdir -p "/home/$USER/.local"
-    sudo mkdir -p "/home/$USER/.local/share/code-server/User"
-    sudo mkdir -p "/home/$USER/.local/share/code-server/Machine"
-    sudo mkdir -p "/home/$USER/.local/share/code-server/extensions"
     
     # Copy course README
     echo "Copying course README for $USER..."
@@ -501,25 +578,14 @@ for i in $(seq 2 $NUM_USERS); do
     
     # Copy configurations
     echo "Copying configurations for $USER..."
-    if ! sudo cp -r /home/student1/.config/* "/home/$USER/.config/"; then
-        echo "✗ Failed to copy .config for $USER"
-        exit 1
-    fi
     if ! sudo cp -r /home/student1/.local/* "/home/$USER/.local/"; then
         echo "✗ Failed to copy .local for $USER"
         exit 1
     fi
-    if ! sudo cp /home/student1/.profile "/home/$USER/"; then
-        echo "✗ Failed to copy .profile for $USER"
-        exit 1
-    fi
     
-    # Fix ownership - ensure all files including Fabric configs are owned by the user
+    # Fix ownership for all user directories
     echo "Setting permissions for $USER..."
     sudo chown -R "$USER:$USER" "/home/$USER"
-    sudo chown -R "$USER:$USER" "/home/$USER/.config/fabric"
-    sudo chown "$USER:$USER" "/home/$USER/.config/fabric/.env"
-    sudo chown "$USER:$USER" "/home/$USER/.config/fabric/config.json"
 
     # Update code-server config with unique port and password
     PASSWORD=$(generate_password)
