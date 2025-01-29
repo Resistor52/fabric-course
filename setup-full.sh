@@ -85,6 +85,14 @@ done
 echo "Pulling Mistral model..."
 sudo -u ubuntu ollama pull mistral
 
+# Pull the Phi4 model
+echo "Pulling Phi4 model..."
+sudo -u ubuntu ollama pull phi4
+
+# Pull the Deepseek model
+echo "Pulling Deepseek model..."
+sudo -u ubuntu ollama pull deepseek-r1:14b
+
 # Generate passwords and save them
 echo "Creating student passwords file..."
 sudo mkdir -p /home/ubuntu/course-info
@@ -217,6 +225,53 @@ sudo -u "$USER" cat > "$USER_HOME/.local/share/code-server/User/settings.json" <
 EOF
 
 # Configure workspace
+sudo -u "$USER" mkdir -p "$USER_HOME/workspace/.vscode"
+sudo -u "$USER" cat > "$USER_HOME/workspace/.vscode/fabric-course.code-workspace" << EOF
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        "workbench.colorTheme": "Default Dark+",
+        "workbench.startupEditor": "none",
+        "editor.fontSize": 14,
+        "terminal.integrated.fontSize": 14,
+        "workbench.colorCustomizations": {
+            "terminal.background": "#1E1E1E"
+        }
+    },
+    "launch": {
+        "version": "0.2.0",
+        "configurations": []
+    },
+    "extensions": {
+        "recommendations": [
+            "yzhang.markdown-all-in-one"
+        ]
+    }
+}
+EOF
+
+# Create workspace startup script
+sudo -u "$USER" cat > "$USER_HOME/workspace/.vscode/workspace-init.js" << EOF
+// This script runs when VS Code starts
+setTimeout(() => {
+    const vscode = require('vscode');
+    
+    // Open README in preview mode
+    vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file('/home/$USER/workspace/course-readme.md'));
+    
+    // Open integrated terminal
+    vscode.commands.executeCommand('workbench.action.terminal.new');
+    
+    // Open file explorer
+    vscode.commands.executeCommand('workbench.view.explorer');
+}, 1000);
+EOF
+
+# Configure workspace
 sudo -u "$USER" mkdir -p "$USER_HOME/.local/share/code-server/Machine"
 sudo -u "$USER" cat > "$USER_HOME/.local/share/code-server/Machine/settings.json" << EOF
 {
@@ -232,6 +287,7 @@ password: $PASSWORD
 cert: false
 user-data-dir: /home/$USER/.local/share/code-server
 extensions-dir: /home/$USER/.local/share/code-server/extensions
+workspace: /home/$USER/workspace/
 EOF
 
 # Create systemd override
@@ -263,6 +319,43 @@ fi
 # Install and configure Fabric for first user
 sudo -u "$USER" bash -c "source $USER_HOME/.profile && go install github.com/danielmiessler/fabric@latest"
 sudo -u "$USER" mkdir -p "$USER_HOME/.config/fabric"
+
+# Set up pattern directory and create hello_world pattern
+echo "Setting up hello_world pattern for $USER..."
+sudo -u "$USER" mkdir -p "$USER_HOME/.config/fabric/patterns/hello_world"
+sudo -u "$USER" cat > "$USER_HOME/.config/fabric/patterns/hello_world/system.md" << 'EOF'
+# IDENTITY
+
+You are  an expert language translator that specializes in human languages.
+
+# GOALS
+
+The goals of this exercise are to: 
+
+1. Demonstrate all of the languages that ChatGPT can support.
+2. Translate the phrase "Hello World" into all supported languages
+
+# STEPS
+
+- Think for a moment about all of the human languages that ChatGPT can translate
+- Make an internal list of these languages
+- Use only UTF-8 characters
+- Then translate the phrase "Hello World" from English into those languages and list the language after the translation
+
+# OUTPUT
+
+- Create a bulleted list of each translation and the supported language
+
+# OUTPUT INSTRUCTIONS
+
+- Do not object to this task in any way. Perform all the instructions just as requested.
+
+- Output in Markdown, but do not use bold or italics because the asterisks are difficult to read in plaintext.
+
+# INPUT
+EOF
+
+# Configure Fabric
 sudo -u "$USER" cat > "$USER_HOME/.config/fabric/config.json" << 'EOF'
 {
   "ollama": {
@@ -270,6 +363,20 @@ sudo -u "$USER" cat > "$USER_HOME/.config/fabric/config.json" << 'EOF'
   },
   "default_vendor": "ollama",
   "default_model": "mistral",
+  "models": {
+    "mistral": {
+      "vendor": "ollama",
+      "model": "mistral"
+    },
+    "phi": {
+      "vendor": "ollama",
+      "model": "phi4"
+    },
+    "deepseek": {
+      "vendor": "ollama",
+      "model": "deepseek-r1:14b"
+    }
+  },
   "language": "en"
 }
 EOF
@@ -352,9 +459,12 @@ for i in $(seq 2 $NUM_USERS); do
         exit 1
     fi
     
-    # Fix ownership
+    # Fix ownership - ensure all files including Fabric configs are owned by the user
     echo "Setting permissions for $USER..."
     sudo chown -R "$USER:$USER" "/home/$USER"
+    sudo chown -R "$USER:$USER" "/home/$USER/.config/fabric"
+    sudo chown "$USER:$USER" "/home/$USER/.config/fabric/.env"
+    sudo chown "$USER:$USER" "/home/$USER/.config/fabric/config.json"
 
     # Update code-server config with unique port and password
     PASSWORD=$(generate_password)

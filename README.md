@@ -63,7 +63,16 @@ This repository contains Terraform configurations to automatically deploy a mult
 - Individual passwords are generated for each student and stored in:
   `/home/ubuntu/course-info/student-passwords.md` on the EC2 instance
 - SSH access: Use the command provided in the Terraform output
-- Additional AI Models: Students can optionally configure additional AI models by running `fabric --setup` in their environment and providing their own API keys (e.g., for OpenAI, Anthropic). This is not required for basic usage as Mistral is pre-installed and ready to use.
+
+### Pre-installed AI Models
+
+The environment comes with several AI models pre-installed and ready to use:
+
+- **Mistral-7B**
+- **Phi4**
+- **deepseek-r1:14b**
+
+Students can optionally configure additional AI models by running `fabric --setup` in their environment and providing their own API keys (e.g., for OpenAI, Anthropic). This is not required for basic usage as the local models are pre-installed and ready to use.
 
 ## Architecture
 
