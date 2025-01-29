@@ -14,54 +14,13 @@ Your environment includes:
 
 1. Open a terminal (Terminal → New Terminal)
 2. Verify Fabric is working:
+
    ```bash
    fabric --version
    ```
 
-3. Test the AI integration:
-   ```bash
-   echo "Hello" | fabric -p ai
-   ```
+Good. You are ready to go!
 
-## Course Content
-
-### Module 1: Introduction to Fabric
-- What is Fabric?
-- Understanding AI-powered workflows
-- Basic command structure
-
-### Module 2: Working with Patterns
-- Built-in patterns
-- Creating custom patterns
-- Pattern composition
-
-### Module 3: AI Integration
-- Working with Ollama
-- Using different models
-- Best practices for prompts
-
-### Module 4: Advanced Topics
-- Custom pattern development
-- Integration with other tools
-- Performance optimization
-
-## Exercises
-
-1. Basic Pattern Usage
-   ```bash
-   # Try these patterns
-   echo "Give me 5 ideas for securing SSH" | fabric -p security
-   echo "Explain quantum computing" | fabric -p explain
-   ```
-
-2. Pattern Exploration
-   ```bash
-   # List available patterns
-   fabric -l
-   
-   # Get pattern details
-   fabric -p security -i
-   ```
 
 ## Additional Resources
 
