@@ -32,7 +32,7 @@ resource "aws_instance" "fabric_course" {
 
   # Required for GPU instances
   root_block_device {
-    volume_size = 30
+    volume_size = 100
     volume_type = "gp3"
   }
 
