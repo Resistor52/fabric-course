@@ -46,10 +46,30 @@ terraform {
   }
 }
 
+# Import the existing Elastic IP
+import {
+  to = aws_eip.fabric_course
+  id = "${ALLOCATION_ID}"
+}
+
 # Store Elastic IP information
 resource "aws_eip" "fabric_course" {
   domain = "vpc"
-  id     = "${ALLOCATION_ID}"
+
+  tags = {
+    Name = "fabric-course-eip"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+EOF
+
+# Create import configuration
+cat > import.tf << EOF
+resource "aws_eip" "fabric_course" {
+  domain = "vpc"
   tags = {
     Name = "fabric-course-eip"
   }
@@ -58,4 +78,10 @@ EOF
 
 echo "Backend setup complete!"
 echo "Bucket name: $BUCKET_NAME"
-echo "Elastic IP: $ELASTIC_IP" 
+echo "Elastic IP: $ELASTIC_IP"
+echo ""
+echo "Next steps:"
+echo "1. Run: terraform init"
+echo "2. Run: terraform import aws_eip.fabric_course ${ALLOCATION_ID}"
+echo "3. Run: terraform plan"
+echo "4. Run: terraform apply" 
