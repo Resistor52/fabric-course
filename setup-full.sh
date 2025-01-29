@@ -160,7 +160,7 @@ USER_HOME="/home/$USER"
 
 # Download practice files
 echo "Downloading practice files..."
-if ! curl -L "https://github.com/Resistor52/fabric_workshop/raw/3e2ab5ca3761b00bed7e4c5682f1d69b38606c92/practice_files.zip" -o /tmp/practice_files.zip; then
+if ! curl -L "https://github.com/Resistor52/fabric_workshop/raw/main/practice_files.zip" -o /tmp/practice_files.zip; then
     echo "✗ Failed to download practice files"
     exit 1
 fi
