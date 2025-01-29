@@ -4,3 +4,4 @@ terraform.tfvars
 *.tfstate.*
 setup.sh
 backend.tf 
+*.time 

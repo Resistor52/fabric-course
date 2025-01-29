@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Enable logging
-exec 1> >(tee -a /var/log/user-data.log) 2>&1
+exec 1> >(tee -a /var/log/user-data.log)
 echo "Main setup script started at $(date)"
 
 # Exit immediately if a command exits with a non-zero status
@@ -759,11 +759,29 @@ curl "https://www.duckdns.org/update?domains=${DOMAIN_PREFIX}&token=${DUCKDNS_TO
 # Function to check if DNS has propagated
 check_dns() {
     local expected_ip=$(curl -s http://checkip.amazonaws.com)
-    local resolved_ip=$(dig +short $DOMAIN @8.8.8.8)
-    if [ "$resolved_ip" = "$expected_ip" ]; then
-        return 0
-    fi
-    return 1
+    local dns_servers=("8.8.8.8" "1.1.1.1" "9.9.9.9" "208.67.222.222")
+    local all_match=true
+
+    echo "Checking DNS propagation across multiple servers..."
+    echo "Expected IP: $expected_ip"
+    
+    for dns in "${dns_servers[@]}"; do
+        echo "Checking DNS server $dns..."
+        local resolved_ip=$(dig +short @$dns $DOMAIN A | grep -v ";" | head -n1)
+        if [ -z "$resolved_ip" ]; then
+            echo "✗ No response from DNS server $dns"
+            all_match=false
+            break
+        elif [ "$resolved_ip" != "$expected_ip" ]; then
+            echo "✗ DNS server $dns returned wrong IP: $resolved_ip"
+            all_match=false
+            break
+        else
+            echo "✓ DNS server $dns returned correct IP"
+        fi
+    done
+
+    $all_match && return 0 || return 1
 }
 
 # Wait for DNS propagation
@@ -771,14 +789,15 @@ echo "Waiting for DNS propagation..."
 for i in {1..20}; do
     echo "Attempt $i: Checking DNS propagation..."
     if check_dns; then
-        echo "DNS has propagated successfully!"
+        echo "✓ DNS has propagated successfully across all tested servers!"
         break
     else
-        echo "DNS not yet propagated, waiting 30 seconds..."
-        sleep 30
-    fi
-    if [ $i -eq 20 ]; then
-        echo "Warning: DNS propagation timeout. Proceeding anyway..."
+        if [ $i -eq 20 ]; then
+            echo "✗ Warning: DNS propagation timeout. Proceeding anyway..."
+        else
+            echo "DNS not yet fully propagated, waiting 30 seconds..."
+            sleep 30
+        fi
     fi
 done
 
@@ -787,11 +806,15 @@ echo "Verifying domain is accessible..."
 for i in {1..6}; do
     echo "Attempt $i: Checking if $DOMAIN is accessible..."
     if curl -s -m 10 "http://${DOMAIN}" > /dev/null; then
-        echo "Domain is accessible!"
+        echo "✓ Domain is accessible!"
         break
     else
-        echo "Domain not yet accessible, waiting 10 seconds..."
-        sleep 10
+        if [ $i -eq 6 ]; then
+            echo "✗ Warning: Domain not accessible after all attempts"
+        else
+            echo "Domain not yet accessible, waiting 10 seconds..."
+            sleep 10
+        fi
     fi
 done
 
