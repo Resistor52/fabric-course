@@ -49,6 +49,12 @@ check_disk_space() {
 cleanup_downloads() {
     echo "Cleaning up downloaded files..."
     rm -f "$USER_HOME/.cache/code-server/code-server_4.96.2_amd64.deb"
+    sudo apt-get clean
+}
+
+# Function for final cleanup
+final_cleanup() {
+    echo "Performing final cleanup..."
     rm -f /tmp/practice_files.zip
     sudo apt-get clean
 }
@@ -484,24 +490,35 @@ MAX_RETRIES=3
 # Check space before downloading patterns
 check_disk_space
 
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if sudo -u "$USER" bash -c "source $USER_HOME/.profile && fabric -U"; then
-        echo "✓ Successfully downloaded Fabric patterns for $USER"
-        break
-    else
-        RETRY_COUNT=$((RETRY_COUNT + 1))
-        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-            echo "Retry $RETRY_COUNT: Failed to download patterns, waiting 10 seconds..."
-            check_disk_space  # Check space before retry
-            sleep 10
+# Clone Fabric patterns repository directly
+echo "Cloning Fabric patterns repository..."
+sudo -u "$USER" git clone https://github.com/danielmiessler/fabric.git "/tmp/fabric-patterns"
+if [ $? -eq 0 ]; then
+    echo "Successfully cloned patterns repository"
+    # Copy patterns to user's config
+    sudo -u "$USER" cp -r "/tmp/fabric-patterns/patterns/"* "$USER_HOME/.config/fabric/patterns/"
+    rm -rf "/tmp/fabric-patterns"
+    echo "✓ Successfully copied Fabric patterns"
+else
+    echo "Failed to clone patterns repository, trying fabric -U command..."
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        if sudo -u "$USER" bash -c "source $USER_HOME/.profile && fabric -U"; then
+            echo "✓ Successfully downloaded Fabric patterns for $USER"
+            break
         else
-            echo "✗ Failed to download Fabric patterns after $MAX_RETRIES attempts"
-            echo "This is not critical, patterns can be downloaded later"
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "Retry $RETRY_COUNT: Failed to download patterns, waiting 10 seconds..."
+                sleep 10
+            else
+                echo "✗ Failed to download Fabric patterns after $MAX_RETRIES attempts"
+                echo "This is not critical, patterns can be downloaded later"
+            fi
         fi
-    fi
-done
+    done
+fi
 
-# Final cleanup
+# Clean up code-server download only
 cleanup_downloads
 
 # Verify Fabric installation and patterns for first user
@@ -761,6 +778,10 @@ if ! sudo certbot --nginx -d ${DOMAIN} --non-interactive --agree-tos --email ${E
         echo "Second attempt at SSL certificate failed. Continuing without SSL..."
     fi
 fi
+
+# After all students are set up and before final tests
+echo "Cleaning up all temporary files..."
+final_cleanup
 
 # Final testing
 echo "Performing final tests..."

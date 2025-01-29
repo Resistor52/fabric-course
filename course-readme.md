@@ -18,6 +18,7 @@ Your environment includes:
    ```bash
    fabric --version
    ```
+3. [Download the PowerPoint slides](https://github.com/Resistor52/fabric_workshop/raw/main/slides/workshop.pptx)
 
 Good. You are ready to go!
 

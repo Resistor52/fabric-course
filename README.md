@@ -42,8 +42,8 @@ This repository contains Terraform configurations to automatically deploy a mult
 
 4. Deploy the infrastructure:
    ```bash
-   terraform init
-   terraform apply
+   terraform init -migrate-state
+   terraform apply -auto-approve
    ```
 
 5. Monitor the setup progress:
