@@ -760,43 +760,50 @@ curl "https://www.duckdns.org/update?domains=${DOMAIN_PREFIX}&token=${DUCKDNS_TO
 check_dns() {
     local expected_ip=$(curl -s http://checkip.amazonaws.com)
     local dns_servers=("8.8.8.8" "1.1.1.1" "9.9.9.9" "208.67.222.222")
-    local all_match=true
+    local success_count=0
+    local required_successes=2  # Only require 2 DNS servers to agree
 
     echo "Checking DNS propagation across multiple servers..."
     echo "Expected IP: $expected_ip"
     
     for dns in "${dns_servers[@]}"; do
         echo "Checking DNS server $dns..."
-        local resolved_ip=$(dig +short @$dns $DOMAIN A | grep -v ";" | head -n1)
+        # Add a small delay between DNS queries
+        sleep 2
+        local resolved_ip=$(dig +short @$dns $DOMAIN A +time=5 +tries=1 | grep -v ";" | head -n1)
         if [ -z "$resolved_ip" ]; then
-            echo "✗ No response from DNS server $dns"
-            all_match=false
-            break
+            echo "? No response from DNS server $dns (might be rate limited)"
+            continue
         elif [ "$resolved_ip" != "$expected_ip" ]; then
-            echo "✗ DNS server $dns returned wrong IP: $resolved_ip"
-            all_match=false
-            break
+            echo "✗ DNS server $dns returned different IP: $resolved_ip"
+            continue
         else
             echo "✓ DNS server $dns returned correct IP"
+            success_count=$((success_count + 1))
+            if [ $success_count -ge $required_successes ]; then
+                echo "✓ Sufficient DNS servers ($success_count) agree on the IP"
+                return 0
+            fi
         fi
     done
 
-    $all_match && return 0 || return 1
+    echo "✗ Only $success_count DNS servers returned the correct IP (need $required_successes)"
+    return 1
 }
 
 # Wait for DNS propagation
 echo "Waiting for DNS propagation..."
-for i in {1..20}; do
+for i in {1..12}; do  # Reduced attempts but increased sleep
     echo "Attempt $i: Checking DNS propagation..."
     if check_dns; then
-        echo "✓ DNS has propagated successfully across all tested servers!"
+        echo "✓ DNS has propagated successfully to enough servers!"
         break
     else
-        if [ $i -eq 20 ]; then
+        if [ $i -eq 12 ]; then
             echo "✗ Warning: DNS propagation timeout. Proceeding anyway..."
         else
-            echo "DNS not yet fully propagated, waiting 30 seconds..."
-            sleep 30
+            echo "DNS not yet sufficiently propagated, waiting 60 seconds..."  # Increased wait time
+            sleep 60
         fi
     fi
 done
