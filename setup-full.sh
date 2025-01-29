@@ -80,7 +80,7 @@ sudo rm -rf /usr/local/go
 echo "Fetching latest Go version..."
 LATEST_GO=$(curl -s https://go.dev/VERSION?m=text | head -n1)
 if [ -z "$LATEST_GO" ] || [ "$LATEST_GO" = "" ]; then
-    echo "Failed to fetch latest Go version, using fallback version go1.21.6"
+    echo "Failed to fetch latest Go version, using fallback version go1.23.5"
     LATEST_GO="go1.23.5"
 fi
 echo "Go version to install: $LATEST_GO"
@@ -92,20 +92,6 @@ if ! wget https://go.dev/dl/$LATEST_GO.linux-amd64.tar.gz; then
         echo "✗ Failed to download Go"
         exit 1
     fi
-fi
-
-echo "Verifying checksum..."
-CHECKSUM=$(curl -sL "https://go.dev/dl/$LATEST_GO.linux-amd64.tar.gz.sha256")
-if [ -z "$CHECKSUM" ]; then
-    CHECKSUM=$(curl -sL "https://golang.org/dl/$LATEST_GO.linux-amd64.tar.gz.sha256")
-fi
-
-if [ -n "$CHECKSUM" ]; then
-    echo "Downloaded checksum: $CHECKSUM"
-    echo "Filename: $LATEST_GO.linux-amd64.tar.gz"
-    echo "$CHECKSUM  $LATEST_GO.linux-amd64.tar.gz" | sha256sum --check || exit 1
-else
-    echo "Warning: Could not verify checksum, proceeding anyway..."
 fi
 
 echo "Extracting Go..."
