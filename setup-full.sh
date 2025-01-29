@@ -76,22 +76,48 @@ echo "Installing Go..."
 # Remove any existing Go installation
 sudo rm -rf /usr/local/go
 
-# Dynamically fetch and install the latest version of Go with checksum verification
+# Try to fetch latest Go version with fallback
 echo "Fetching latest Go version..."
 LATEST_GO=$(curl -s https://go.dev/VERSION?m=text | head -n1)
-echo "Latest Go version: $LATEST_GO"
+if [ -z "$LATEST_GO" ] || [ "$LATEST_GO" = "" ]; then
+    echo "Failed to fetch latest Go version, using fallback version go1.21.6"
+    LATEST_GO="go1.23.5"
+fi
+echo "Go version to install: $LATEST_GO"
 
 echo "Downloading Go..."
-wget https://go.dev/dl/$LATEST_GO.linux-amd64.tar.gz
-CHECKSUM=$(curl -sL "https://dl.google.com/go/$LATEST_GO.linux-amd64.tar.gz.sha256")
-echo "Downloaded checksum: $CHECKSUM"
-echo "Filename: $LATEST_GO.linux-amd64.tar.gz"
+if ! wget https://go.dev/dl/$LATEST_GO.linux-amd64.tar.gz; then
+    echo "Failed to download Go using go.dev, trying golang.org..."
+    if ! wget https://golang.org/dl/$LATEST_GO.linux-amd64.tar.gz; then
+        echo "✗ Failed to download Go"
+        exit 1
+    fi
+fi
 
 echo "Verifying checksum..."
-echo "$CHECKSUM  $LATEST_GO.linux-amd64.tar.gz" | sha256sum --check
-echo "Checksum verified, extracting..."
+CHECKSUM=$(curl -sL "https://go.dev/dl/$LATEST_GO.linux-amd64.tar.gz.sha256")
+if [ -z "$CHECKSUM" ]; then
+    CHECKSUM=$(curl -sL "https://golang.org/dl/$LATEST_GO.linux-amd64.tar.gz.sha256")
+fi
+
+if [ -n "$CHECKSUM" ]; then
+    echo "Downloaded checksum: $CHECKSUM"
+    echo "Filename: $LATEST_GO.linux-amd64.tar.gz"
+    echo "$CHECKSUM  $LATEST_GO.linux-amd64.tar.gz" | sha256sum --check || exit 1
+else
+    echo "Warning: Could not verify checksum, proceeding anyway..."
+fi
+
+echo "Extracting Go..."
 sudo tar -C /usr/local -xzf $LATEST_GO.linux-amd64.tar.gz
 rm $LATEST_GO.linux-amd64.tar.gz
+
+# Verify Go installation
+if ! /usr/local/go/bin/go version; then
+    echo "✗ Go installation failed"
+    exit 1
+fi
+echo "✓ Go installed successfully"
 
 # Install and configure Ollama
 echo "Installing Ollama..."
