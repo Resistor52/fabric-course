@@ -317,8 +317,27 @@ if ! grep -q "Student 1" /home/ubuntu/course-info/student-passwords.md; then
 fi
 
 # Install and configure Fabric for first user
-sudo -u "$USER" bash -c "source $USER_HOME/.profile && go install github.com/danielmiessler/fabric@latest"
+echo "Installing Fabric for $USER..."
+if ! sudo -u "$USER" bash -c "source $USER_HOME/.profile && go install github.com/danielmiessler/fabric@latest"; then
+    echo "✗ Failed to install Fabric for $USER"
+    exit 1
+fi
+
+# Verify Fabric installation
+if ! sudo -u "$USER" bash -c "source $USER_HOME/.profile && which fabric" > /dev/null; then
+    echo "✗ Fabric binary not found in PATH for $USER"
+    exit 1
+fi
+
+# Configure Fabric directories and files
 sudo -u "$USER" mkdir -p "$USER_HOME/.config/fabric"
+sudo -u "$USER" mkdir -p "$USER_HOME/.config/fabric/patterns"
+
+# Set proper permissions for Fabric directories
+echo "Setting proper permissions for Fabric directories..."
+sudo chown -R "$USER:$USER" "$USER_HOME/.config/fabric"
+sudo chmod -R 755 "$USER_HOME/.config/fabric"
+sudo chmod -R u+w "$USER_HOME/.config/fabric/patterns"
 
 # Set up pattern directory and create hello_world pattern
 echo "Setting up hello_world pattern for $USER..."
@@ -391,16 +410,38 @@ EOF
 
 # Download patterns for first user
 echo "Downloading patterns for $USER..."
-if ! sudo -u "$USER" bash -c "source $USER_HOME/.profile && fabric -U"; then
-    echo "✗ Failed to download Fabric patterns"
-    echo "This is not critical, patterns can be downloaded later"
-fi
+RETRY_COUNT=0
+MAX_RETRIES=3
 
-# Verify Fabric installation
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if sudo -u "$USER" bash -c "source $USER_HOME/.profile && fabric -U"; then
+        echo "✓ Successfully downloaded Fabric patterns for $USER"
+        break
+    else
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "Retry $RETRY_COUNT: Failed to download patterns, waiting 10 seconds..."
+            sleep 10
+        else
+            echo "✗ Failed to download Fabric patterns after $MAX_RETRIES attempts"
+            echo "This is not critical, patterns can be downloaded later"
+        fi
+    fi
+done
+
+# Verify Fabric installation and patterns for first user
+echo "Verifying Fabric setup for $USER..."
 if sudo -u "$USER" bash -c "source $USER_HOME/.profile && which fabric" > /dev/null; then
-    echo "✓ Fabric installed successfully"
+    echo "✓ Fabric binary is installed"
+    if [ -d "$USER_HOME/.config/fabric/patterns" ]; then
+        echo "✓ Patterns directory exists"
+        PATTERN_COUNT=$(find "$USER_HOME/.config/fabric/patterns" -type f | wc -l)
+        echo "Found $PATTERN_COUNT pattern files"
+    else
+        echo "✗ Patterns directory is missing"
+    fi
 else
-    echo "✗ Fabric installation failed"
+    echo "✗ Fabric installation verification failed"
     exit 1
 fi
 
@@ -425,10 +466,24 @@ for i in $(seq 2 $NUM_USERS); do
     fi
     echo "✓ Practice files extracted successfully for $USER"
 
+    # Copy Go profile settings
+    sudo cp /home/student1/.profile "/home/$USER/"
+
+    # Copy Fabric binary from student1's Go path to this user's Go path
+    echo "Copying Fabric binary for $USER..."
+    sudo mkdir -p "/home/$USER/go/bin"
+    sudo cp /home/student1/go/bin/fabric "/home/$USER/go/bin/"
+    sudo chown -R "$USER:$USER" "/home/$USER/go"
+
+    # Copy Fabric configuration and patterns
+    echo "Copying Fabric configuration and patterns for $USER..."
+    sudo cp -r /home/student1/.config/fabric "/home/$USER/.config/"
+    sudo chown -R "$USER:$USER" "/home/$USER/.config/fabric"
+    sudo chmod -R 755 "/home/$USER/.config/fabric"
+    sudo chmod -R u+w "/home/$USER/.config/fabric/patterns"
+
+    # Continue with the rest of user setup...
     sudo mkdir -p "/home/$USER/workspace/.vscode"
-    sudo mkdir -p "/home/$USER/.config"
-    sudo mkdir -p "/home/$USER/.config/fabric"
-    sudo mkdir -p "/home/$USER/.config/code-server"
     sudo mkdir -p "/home/$USER/.local"
     sudo mkdir -p "/home/$USER/.local/share/code-server/User"
     sudo mkdir -p "/home/$USER/.local/share/code-server/Machine"
@@ -652,24 +707,47 @@ else
     echo "✗ Ollama service is not responding"
 fi
 
-# Test each student's code-server instance
-echo -e "\nTesting code-server instances..."
+# Test each student's code-server instance and Fabric installation
+echo -e "\nTesting student environments..."
 for i in $(seq 1 $NUM_USERS); do
-    echo "Testing student$i environment..."
+    USER="student$i"
+    echo "Testing $USER environment..."
     
     # Test code-server
-    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/student$i/")
+    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/$USER/")
     if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "302" ]; then
-        echo "✓ code-server for student$i is accessible"
+        echo "✓ code-server for $USER is accessible"
     else
-        echo "✗ code-server for student$i returned status $RESPONSE"
+        echo "✗ code-server for $USER returned status $RESPONSE"
     fi
     
     # Test if service is running
-    if systemctl is-active --quiet code-server@student$i; then
-        echo "✓ code-server@student$i service is running"
+    if systemctl is-active --quiet code-server@$USER; then
+        echo "✓ code-server@$USER service is running"
     else
-        echo "✗ code-server@student$i service is not running"
+        echo "✗ code-server@$USER service is not running"
+    fi
+
+    # Test Fabric installation
+    if sudo -u "$USER" bash -c "source /home/$USER/.profile && which fabric" > /dev/null; then
+        echo "✓ Fabric is installed for $USER"
+        
+        # Test Fabric configuration
+        if [ -f "/home/$USER/.config/fabric/config.json" ]; then
+            echo "✓ Fabric config exists for $USER"
+        else
+            echo "✗ Fabric config missing for $USER"
+        fi
+        
+        # Test patterns directory
+        if [ -d "/home/$USER/.config/fabric/patterns" ]; then
+            PATTERN_COUNT=$(find "/home/$USER/.config/fabric/patterns" -type f | wc -l)
+            echo "✓ Patterns directory exists for $USER with $PATTERN_COUNT files"
+        else
+            echo "✗ Patterns directory missing for $USER"
+        fi
+    else
+        echo "✗ Fabric not installed for $USER"
     fi
 done
 
