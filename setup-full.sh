@@ -229,7 +229,20 @@ sudo chown -R "$USER:$USER" "$USER_HOME/workspace"
 echo "✓ Practice files extracted successfully for student1"
 
 # Add Go environment variables to user's profile
-sudo -u "$USER" cat >> "$USER_HOME/.profile" << 'EOF'
+sudo -u "$USER" cat > "$USER_HOME/.profile" << 'EOF'
+# Golang environment variables
+export GOROOT=/usr/local/go
+export GOPATH=$HOME/go
+export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
+
+# Source .bashrc if it exists
+if [ -f "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+fi
+EOF
+
+# Also add to .bashrc to ensure it's available in all shells
+sudo -u "$USER" cat > "$USER_HOME/.bashrc" << 'EOF'
 # Golang environment variables
 export GOROOT=/usr/local/go
 export GOPATH=$HOME/go
@@ -526,9 +539,8 @@ echo "Verifying Fabric setup for $USER..."
 if sudo -u "$USER" bash -c "source $USER_HOME/.profile && which fabric" > /dev/null; then
     echo "✓ Fabric binary is installed"
     if [ -d "$USER_HOME/.config/fabric/patterns" ]; then
-        echo "✓ Patterns directory exists"
-        PATTERN_COUNT=$(find "$USER_HOME/.config/fabric/patterns" -type f | wc -l)
-        echo "Found $PATTERN_COUNT pattern files"
+        PATTERN_COUNT=$(sudo -u "$USER" bash -c "source /home/$USER/.profile && fabric -l | wc -l")
+        echo "✓ Patterns directory exists for $USER with $PATTERN_COUNT available patterns"
     else
         echo "✗ Patterns directory is missing"
     fi
@@ -554,6 +566,7 @@ for i in $(seq 2 $NUM_USERS); do
     sudo mkdir -p "/home/$USER/workspace"
     sudo mkdir -p "/home/$USER/workspace/.vscode"
     sudo mkdir -p "/home/$USER/.config"
+    sudo mkdir -p "/home/$USER/.config/code-server"
     sudo mkdir -p "/home/$USER/.local/share/code-server/User"
     sudo mkdir -p "/home/$USER/.local/share/code-server/Machine"
     sudo mkdir -p "/home/$USER/.local/share/code-server/extensions"
@@ -569,6 +582,7 @@ for i in $(seq 2 $NUM_USERS); do
 
     # Copy Go profile settings
     sudo cp /home/student1/.profile "/home/$USER/"
+    sudo cp /home/student1/.bashrc "/home/$USER/"
 
     # Copy Fabric binary from student1's Go path to this user's Go path
     echo "Copying Fabric binary for $USER..."
@@ -828,8 +842,8 @@ for i in $(seq 1 $NUM_USERS); do
         
         # Test patterns directory
         if [ -d "/home/$USER/.config/fabric/patterns" ]; then
-            PATTERN_COUNT=$(find "/home/$USER/.config/fabric/patterns" -type f | wc -l)
-            echo "✓ Patterns directory exists for $USER with $PATTERN_COUNT files"
+            PATTERN_COUNT=$(sudo -u "$USER" bash -c "source /home/$USER/.profile && fabric -l | wc -l")
+            echo "✓ Patterns directory exists for $USER with $PATTERN_COUNT available patterns"
         else
             echo "✗ Patterns directory missing for $USER"
         fi
