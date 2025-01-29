@@ -27,7 +27,7 @@ data "template_file" "setup" {
 
 resource "aws_instance" "fabric_course" {
   ami           = data.aws_ami.ubuntu.id
-  instance_type = "g5.xlarge"
+  instance_type = "g5.2xlarge"
   key_name      = var.ssh_key_name
 
   # Required for GPU instances
@@ -56,14 +56,19 @@ resource "aws_instance" "fabric_course" {
   }
 }
 
-# Output the public IP of the instance
-output "public_ip" {
-  value = aws_instance.fabric_course.public_ip
-  depends_on = [aws_instance.fabric_course]
+# Associate the Elastic IP with the instance
+resource "aws_eip_association" "fabric_course" {
+  instance_id   = aws_instance.fabric_course.id
+  allocation_id = aws_eip.fabric_course.id
 }
 
-# Add SSH command output
+# Update the outputs to use the Elastic IP
+output "public_ip" {
+  value = aws_eip.fabric_course.public_ip
+  depends_on = [aws_eip_association.fabric_course]
+}
+
 output "ssh_command" {
-  value = "ssh -i ${var.ssh_pem_file} ubuntu@${aws_instance.fabric_course.public_ip}"
-  depends_on = [aws_instance.fabric_course]
+  value = "ssh -i ${var.ssh_pem_file} ubuntu@${aws_eip.fabric_course.public_ip}"
+  depends_on = [aws_eip_association.fabric_course]
 } 
