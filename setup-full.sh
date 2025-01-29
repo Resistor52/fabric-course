@@ -15,7 +15,7 @@ NUM_USERS=10
 echo "Updating system and installing dependencies..."
 sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl software-properties-common ufw nginx certbot python3-certbot-nginx dnsutils wamerican
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl software-properties-common ufw nginx certbot python3-certbot-nginx dnsutils wamerican unzip
 
 # Install Go (required for Fabric)
 echo "Installing Go..."
@@ -149,6 +149,22 @@ PORT=$BASE_PORT
 # Create user
 sudo useradd -m -s /bin/bash "$USER"
 USER_HOME="/home/$USER"
+
+# Download practice files
+echo "Downloading practice files..."
+if ! curl -L "https://github.com/Resistor52/fabric_workshop/raw/3e2ab5ca3761b00bed7e4c5682f1d69b38606c92/practice_files.zip" -o /tmp/practice_files.zip; then
+    echo "✗ Failed to download practice files"
+    exit 1
+fi
+
+# Extract practice files to student1's workspace
+echo "Extracting practice files for student1..."
+if ! sudo unzip -q /tmp/practice_files.zip -d "$USER_HOME/workspace/"; then
+    echo "✗ Failed to extract practice files"
+    exit 1
+fi
+sudo chown -R "$USER:$USER" "$USER_HOME/workspace"
+echo "✓ Practice files extracted successfully for student1"
 
 # Add Go environment variables to user's profile
 sudo -u "$USER" cat >> "$USER_HOME/.profile" << 'EOF'
@@ -293,6 +309,15 @@ for i in $(seq 2 $NUM_USERS); do
     # Create user and base directories
     sudo useradd -m -s /bin/bash "$USER"
     sudo mkdir -p "/home/$USER/workspace"
+    
+    # Extract practice files for this student
+    echo "Extracting practice files for $USER..."
+    if ! sudo unzip -q /tmp/practice_files.zip -d "/home/$USER/workspace/"; then
+        echo "✗ Failed to extract practice files for $USER"
+        exit 1
+    fi
+    echo "✓ Practice files extracted successfully for $USER"
+
     sudo mkdir -p "/home/$USER/workspace/.vscode"
     sudo mkdir -p "/home/$USER/.config"
     sudo mkdir -p "/home/$USER/.config/fabric"
@@ -457,6 +482,32 @@ echo "Updating DuckDNS..."
 DOMAIN_PREFIX=$(echo $DOMAIN | cut -d. -f1)
 curl "https://www.duckdns.org/update?domains=${DOMAIN_PREFIX}&token=${DUCKDNS_TOKEN}&ip="
 
+# Function to check if DNS has propagated
+check_dns() {
+    local expected_ip=$(curl -s http://checkip.amazonaws.com)
+    local resolved_ip=$(dig +short $DOMAIN @8.8.8.8)
+    if [ "$resolved_ip" = "$expected_ip" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Wait for DNS propagation
+echo "Waiting for DNS propagation..."
+for i in {1..20}; do
+    echo "Attempt $i: Checking DNS propagation..."
+    if check_dns; then
+        echo "DNS has propagated successfully!"
+        break
+    else
+        echo "DNS not yet propagated, waiting 30 seconds..."
+        sleep 30
+    fi
+    if [ $i -eq 20 ]; then
+        echo "Warning: DNS propagation timeout. Proceeding anyway..."
+    fi
+done
+
 # Verify domain is accessible
 echo "Verifying domain is accessible..."
 for i in {1..6}; do
@@ -470,9 +521,15 @@ for i in {1..6}; do
     fi
 done
 
-# Get SSL certificate
+# Get SSL certificate with automatic renewal
 echo "Getting SSL certificate from Let's Encrypt..."
-sudo certbot --nginx -d ${DOMAIN} --non-interactive --agree-tos --email ${EMAIL} --redirect
+if ! sudo certbot --nginx -d ${DOMAIN} --non-interactive --agree-tos --email ${EMAIL} --redirect; then
+    echo "First attempt at SSL certificate failed, waiting 60 seconds and trying again..."
+    sleep 60
+    if ! sudo certbot --nginx -d ${DOMAIN} --non-interactive --agree-tos --email ${EMAIL} --redirect; then
+        echo "Second attempt at SSL certificate failed. Continuing without SSL..."
+    fi
+fi
 
 # Final testing
 echo "Performing final tests..."
